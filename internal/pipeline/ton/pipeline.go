@@ -27,6 +27,8 @@ type Pipeline struct {
 	TONConfig           string
 	UseDeDust           bool
 	UseStonFi           bool
+	UseCoffee           bool
+	OnlyShowCycles      bool
 
 	StartTokens     []string
 	MaxStartCapital []float64
@@ -41,6 +43,10 @@ func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.Arbitrag
 		if c.StartCapital <= maxStartCapital && c.Profit-stepFee*float64(len(c.PoolsOrder)) > 0 {
 			fmt.Println("Executing cycle:")
 			analyzer.Calculate(c.PoolsOrder, c.StartCapital, startToken, true)
+
+			if p.OnlyShowCycles {
+				continue
+			}
 
 			ce := tonexecutor.CycleExecutor{
 				TONClient: p.Client,
@@ -64,6 +70,7 @@ func (p *Pipeline) Do(ctx context.Context) error {
 		pools, err := aggregator.FetchPools(ctx, p.Client, aggregator.AggregatorSettings{
 			UseDeDust:           p.UseDeDust,
 			UseStonFi:           p.UseStonFi,
+			UseCoffee:           p.UseCoffee,
 			DedustPoolsFilePath: p.DedustPoolsFilePath,
 			StonfiPoolsFilePath: p.StonfiPoolsFilePath,
 		})

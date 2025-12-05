@@ -57,9 +57,11 @@ func main() {
 		TONConfig:           kTONMainNetConfig,
 		UseDeDust:           true,
 		UseStonFi:           true,
+		UseCoffee:           false,
 		StartTokens:         []string{kTON, kUSDT},
 		MaxStartCapital:     []float64{15, 30},
-		StepFees:            []float64{0.07, 0.2},
+		StepFees:            []float64{0.06, 0.18},
+		OnlyShowCycles:      true,
 	}
 
 	err = pipeline.Do(ctx)
