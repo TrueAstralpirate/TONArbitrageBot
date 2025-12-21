@@ -31,16 +31,17 @@ type Pipeline struct {
 	OnlyShowCycles      bool
 
 	StartTokens     []string
+	MinStartCapital []float64
 	MaxStartCapital []float64
 	StepFees        []float64
 }
 
-func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.ArbitrageCycle, startToken string, maxStartCapital, stepFee float64) error {
+func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.ArbitrageCycle, startToken string, minStartCapital, maxStartCapital, stepFee float64) error {
 	sort.Slice(cycles, func(i, j int) bool {
 		return cycles[i].Profit-stepFee*float64(len(cycles[i].PoolsOrder)) > cycles[j].Profit-stepFee*float64(len(cycles[j].PoolsOrder))
 	})
 	for _, c := range cycles {
-		if c.StartCapital <= maxStartCapital && c.Profit-stepFee*float64(len(c.PoolsOrder)) > 0 {
+		if c.StartCapital >= minStartCapital && c.StartCapital <= maxStartCapital && c.Profit-stepFee*float64(len(c.PoolsOrder)) > 0 {
 			fmt.Println("Executing cycle:")
 			analyzer.Calculate(c.PoolsOrder, c.StartCapital, startToken, true)
 
@@ -52,6 +53,7 @@ func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.Arbitrag
 				TONClient: p.Client,
 				Wallet:    p.Wallet,
 			}
+
 			err := ce.ExecuteCycle(ctx, c)
 			if err != nil {
 				return fmt.Errorf("build messages from arbitrage cycle: %w", err)
@@ -85,11 +87,12 @@ func (p *Pipeline) Do(ctx context.Context) error {
 		graph := analyzer.BuildGraph(pools)
 
 		startToken := p.StartTokens[i]
+		minStartCapital := p.MinStartCapital[i]
 		maxStartCapital := p.MaxStartCapital[i]
 		stepFee := p.StepFees[i]
 		cycles := graph.FindAllCycles(startToken)
 
-		err = p.DoForStartToken(ctx, cycles, startToken, maxStartCapital, stepFee)
+		err = p.DoForStartToken(ctx, cycles, startToken, minStartCapital, maxStartCapital, stepFee)
 		if err != nil {
 			fmt.Printf("failed to find and execute cycle: %e\n", err)
 			i = (i + 1) % len(p.StartTokens)

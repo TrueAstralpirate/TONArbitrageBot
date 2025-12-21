@@ -65,6 +65,7 @@ func GetAssets() ([]Asset, error) {
 
 type Pool struct {
 	Address                    string `json:"address"`
+	Amp                        string `json:"amp"`
 	CollectedToken0ProtocolFee string `json:"collected_token0_protocol_fee"`
 	CollectedToken1ProtocolFee string `json:"collected_token1_protocol_fee"`
 	LpAccountAddress           string `json:"lp_account_address"`

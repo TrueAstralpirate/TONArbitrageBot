@@ -5,7 +5,6 @@ import (
 	"arbitrage/internal/explorer/ton/chain"
 	"arbitrage/internal/models"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
@@ -16,8 +15,7 @@ import (
 const (
 	kWordsFilePath = "words.txt"
 
-	kTONMainNetConfig = "https://ton.org/global.config.json"
-	kTON              = "TON"
+	kTONMainNetConfig = "https://ton-blockchain.github.io/global.config.json"
 )
 
 func main() {
@@ -65,9 +63,9 @@ func main() {
 		panic(err)
 	}
 	fmt.Println(msg)
-	tx, _, err := ce.Wallet.SendWaitTransaction(ctx, msg)
+	err = ce.Wallet.Send(ctx, msg, true)
 	if err != nil {
 		panic(fmt.Errorf("send transaction: %w", err))
 	}
-	fmt.Println("transaction confirmed, hash:", base64.StdEncoding.EncodeToString(tx.Hash))
+	fmt.Println("transaction confirmed")
 }

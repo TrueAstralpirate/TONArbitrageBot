@@ -26,7 +26,14 @@ func Calculate(pools []models.Pool, x float64, startAddress string, flag bool) (
 			panic(err)
 		}
 		if flag {
-			fmt.Println("Trade:", cur, curName, "--->", res, nextToken.Name, "|", p.DEX, p.Address)
+			poolLink := p.Address
+			switch p.DEX {
+			case models.DEXNameStonFi:
+				poolLink = fmt.Sprintf("https://app.ston.fi/pools/%s", p.Address)
+			case models.DEXNameDeDust:
+				poolLink = fmt.Sprintf("https://dedust.io/pools/%s", p.Address)
+			}
+			fmt.Println("Trade:", cur, curName, "--->", res, nextToken.Name, "|", p.DEX, poolLink)
 		}
 		cur = res
 		curName = nextToken.Name
