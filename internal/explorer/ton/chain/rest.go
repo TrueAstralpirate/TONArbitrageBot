@@ -113,7 +113,7 @@ func BuildAddress(a Asset) string {
 }
 
 type TonClient struct {
-	Api *ton.APIClient
+	Api ton.APIClientWrapped
 }
 
 func NewTonClient(ctx context.Context, configUrl string) (*TonClient, error) {
@@ -124,8 +124,10 @@ func NewTonClient(ctx context.Context, configUrl string) (*TonClient, error) {
 		return nil, fmt.Errorf("failed to add connections from config url: %w", err)
 	}
 
+	api := ton.NewAPIClient(client).WithRetry() // Enables automatic retries with failover to another node
+
 	return &TonClient{
-		Api: ton.NewAPIClient(client),
+		Api: api,
 	}, nil
 }
 
@@ -221,6 +223,7 @@ func (tc *TonClient) GetDedustReserves(ctx context.Context, addr string) (*GetDe
 
 type GetStonfiPoolData struct {
 	Version             int
+	Weight0             float64
 	Reserve0            int
 	Reserve1            int
 	RouterAddress       string

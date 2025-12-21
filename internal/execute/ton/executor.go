@@ -5,12 +5,12 @@ import (
 	"arbitrage/internal/models"
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/xssnick/tonutils-go/address"
@@ -24,6 +24,8 @@ const (
 	kTON               = "TON"
 	kProxyTONV1        = "EQARULUYsmJq1RiZ-YiH-IJLcAZUVkVff-KBPwEmmaQGH6aC"
 	kDeDustNativeVault = "EQDa4VOnTYlLvDJ0gZjNYm5PXfSmmtL6Vs6A_CZEtXCNICq_"
+	// transactionConfirmationTimeout defines how long we wait for TON to confirm a tx before giving up.
+	transactionConfirmationTimeout = 10 * time.Minute
 )
 
 type CycleExecutor struct {
@@ -52,6 +54,9 @@ func (ce *CycleExecutor) GetJettonBalance(ctx context.Context, tokenAddress stri
 
 	tokenBalance, err := tokenWallet.GetBalance(ctx)
 	if err != nil {
+		if strings.Contains(err.Error(), "contract is not initialized") {
+			return big.NewInt(0), nil
+		}
 		return nil, fmt.Errorf("get jetton balance: %w", err)
 	}
 	return tokenBalance, nil
@@ -118,7 +123,7 @@ func (ce *CycleExecutor) BuildStonFiSwapV1Message(ctx context.Context, token1Rou
 	swapV1Message := StonFiSwapV1Message{
 		TokenWalletAddr: token1RouterAddress,
 		MinOut:          minOut,
-		ToWalletAddr:    ce.Wallet.Address(),
+		ToWalletAddr:    ce.Wallet.WalletAddress(),
 		RefAddr:         nil,
 	}
 	payload, err := tlb.ToCell(swapV1Message)
@@ -126,13 +131,13 @@ func (ce *CycleExecutor) BuildStonFiSwapV1Message(ctx context.Context, token1Rou
 		return nil, fmt.Errorf("to cell: %w", err)
 	}
 
-	return buildTransferPayloadV2(routerAddress, ce.Wallet.Address(), amountCoins, amountForwardTON, payload, nil)
+	return buildTransferPayloadV2(routerAddress, ce.Wallet.WalletAddress(), amountCoins, amountForwardTON, payload, nil)
 }
 
 func (ce *CycleExecutor) BuildStonFiSwapV2Payload(ctx context.Context, token1RouterAddress, routerAddress *address.Address, amountCoins, minOut tlb.Coins) (*cell.Cell, error) {
 	crossSwapBody := CrossSwap{
 		MinOut:        minOut,
-		ReceiverAddr:  ce.Wallet.Address(),
+		ReceiverAddr:  ce.Wallet.WalletAddress(),
 		FwdGas:        tlb.MustFromTON("0.0"),
 		CustomPayload: nil,
 		RefundFwdGas:  tlb.MustFromTON("0.0"),
@@ -142,8 +147,8 @@ func (ce *CycleExecutor) BuildStonFiSwapV2Payload(ctx context.Context, token1Rou
 	}
 	stonFiSwapV2Message := StonFiSwapV2Message{
 		TokenWalletAddr: token1RouterAddress,
-		RefundAddr:      ce.Wallet.Address(),
-		ExcessesAddr:    ce.Wallet.Address(),
+		RefundAddr:      ce.Wallet.WalletAddress(),
+		ExcessesAddr:    ce.Wallet.WalletAddress(),
 		Deadline:        uint64(time.Now().Add(24 * time.Hour).Unix()),
 		CrossSwapBody:   &crossSwapBody,
 	}
@@ -206,7 +211,7 @@ func (ce *CycleExecutor) BuildStonFiSwapMessage(ctx context.Context, tokenToSwap
 			transferMessage := PTonTONTransferMessage{
 				QueryID:        0,
 				TonAmount:      coinsAmountToSwap,
-				RefundAddr:     ce.Wallet.Address(),
+				RefundAddr:     ce.Wallet.WalletAddress(),
 				ForwardPayload: payload,
 			}
 			transferPayload, err := tlb.ToCell(transferMessage)
@@ -215,7 +220,7 @@ func (ce *CycleExecutor) BuildStonFiSwapMessage(ctx context.Context, tokenToSwap
 			}
 			return ce.BuildTransferTONMessage(ctx, currentTokenRouterWallet, forwardTON1, transferPayload)
 		} else {
-			transferPayload, err := buildTransferPayloadV2(address.MustParseAddr(poolInfo.RouterAddress), ce.Wallet.Address(), coinsAmountToSwap, forwardTON2, payload, nil)
+			transferPayload, err := buildTransferPayloadV2(address.MustParseAddr(poolInfo.RouterAddress), ce.Wallet.WalletAddress(), coinsAmountToSwap, forwardTON2, payload, nil)
 			if err != nil {
 				return nil, fmt.Errorf("build transfer payload v2")
 			}
@@ -252,7 +257,7 @@ func (ce *CycleExecutor) BuildDeDustSwapNativeMessage(ctx context.Context, poolA
 		},
 		Params: &SwapParams{
 			Deadline:        uint32(time.Now().Add(24 * time.Hour).Unix()),
-			RecipientAddr:   ce.Wallet.Address(),
+			RecipientAddr:   ce.Wallet.WalletAddress(),
 			ReferralAddr:    nil,
 			FullfillPayload: nil,
 			RejectPayload:   nil,
@@ -273,7 +278,7 @@ func (ce *CycleExecutor) BuildDeDustSwapJettonMessage(ctx context.Context, token
 		},
 		Params: &SwapParams{
 			Deadline:        uint32(time.Now().Add(24 * time.Hour).Unix()),
-			RecipientAddr:   ce.Wallet.Address(),
+			RecipientAddr:   ce.Wallet.WalletAddress(),
 			ReferralAddr:    nil,
 			FullfillPayload: nil,
 			RejectPayload:   nil,
@@ -284,7 +289,7 @@ func (ce *CycleExecutor) BuildDeDustSwapJettonMessage(ctx context.Context, token
 		return nil, fmt.Errorf("build cell from swap message: %w", err)
 	}
 
-	transferPayload, err := buildTransferPayloadV2(token0VaultAddress, ce.Wallet.Address(), amountCoins, amountForwardTON, payload, nil)
+	transferPayload, err := buildTransferPayloadV2(token0VaultAddress, ce.Wallet.WalletAddress(), amountCoins, amountForwardTON, payload, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build transfer payload v2: %w", err)
 	}
@@ -351,19 +356,23 @@ func (ce *CycleExecutor) ExecuteCycle(ctx context.Context, cycle models.Arbitrag
 		}
 
 		fmt.Println("swapping:", amountToSwap, token.Symbol, "--->", res, nextToken.Symbol)
-		tx, _, err := ce.Wallet.SendWaitTransaction(ctx, msg)
+		err = ce.Wallet.Send(ctx, msg)
 		if err != nil {
 			return fmt.Errorf("send transaction: %w", err)
 		}
-		fmt.Println("transaction confirmed, hash:", base64.StdEncoding.EncodeToString(tx.Hash))
+		fmt.Println("transaction confirmed")
+		deadline := time.Now().Add(2 * time.Minute)
 		for {
 			balanceAfterTransaction, err := ce.GetTokenBalance(ctx, *nextToken)
 			fmt.Println("current balance is: ", balanceAfterTransaction, nextToken.Symbol)
 			time.Sleep(5 * time.Second)
+			if time.Now().After(deadline) {
+				return fmt.Errorf("balance did not change after 2 minutes for token %s", nextToken.Symbol)
+			}
 			if err != nil {
 				continue
 			}
-			if balanceAfterTransaction-balanceBeforeTransaction >= res || (nextToken.Address == kTON && balanceAfterTransaction != balanceBeforeTransaction && balanceAfterTransaction > res) {
+			if balanceAfterTransaction != balanceBeforeTransaction {
 				break
 			}
 		}

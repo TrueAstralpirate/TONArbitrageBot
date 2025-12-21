@@ -16,10 +16,9 @@ const (
 	kStonfiPoolsFilePath = "stonfi_pools.json"
 	kWordsFilePath       = "words.txt"
 
-	kTONMainNetConfig = "https://ton.org/global.config.json"
+	kTONMainNetConfig = "https://ton-blockchain.github.io/global.config.json"
 	kTON              = "TON"
 	kUSDT             = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs"
-	kStart            = kTON
 )
 
 func main() {
@@ -31,9 +30,8 @@ func main() {
 		client, err = chain.NewTonClient(ctx, kTONMainNetConfig)
 		if err != nil {
 			continue
-		} else {
-			break
 		}
+		break
 	}
 
 	data, err := os.ReadFile(kWordsFilePath)
@@ -42,7 +40,7 @@ func main() {
 	}
 	words := strings.Split(string(data), "\n")
 
-	w, err := wallet.FromSeed(client.Api, words, wallet.ConfigV5R1Final{
+	w, err := wallet.FromSeedWithOptions(client.Api, words, wallet.ConfigV5R1Final{
 		NetworkGlobalID: wallet.MainnetGlobalID,
 	})
 	if err != nil {
@@ -59,9 +57,10 @@ func main() {
 		UseStonFi:           true,
 		UseCoffee:           false,
 		StartTokens:         []string{kTON, kUSDT},
+		MinStartCapital:     []float64{0.1, 0.2},
 		MaxStartCapital:     []float64{15, 30},
 		StepFees:            []float64{0.06, 0.18},
-		OnlyShowCycles:      true,
+		OnlyShowCycles:      false,
 	}
 
 	err = pipeline.Do(ctx)
