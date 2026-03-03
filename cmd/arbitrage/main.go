@@ -58,7 +58,7 @@ func main() {
 		UseCoffee:           false,
 		StartTokens:         []string{kTON, kUSDT},
 		MinStartCapital:     []float64{0.1, 0.2},
-		MaxStartCapital:     []float64{15, 30},
+		MaxStartCapital:     []float64{120, 200},
 		StepFees:            []float64{0.06, 0.18},
 		OnlyShowCycles:      false,
 	}

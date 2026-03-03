@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -27,6 +28,8 @@ const (
 	// transactionConfirmationTimeout defines how long we wait for TON to confirm a tx before giving up.
 	transactionConfirmationTimeout = 10 * time.Minute
 )
+
+var errBalanceDidNotChange = errors.New("balance did not change after timeout")
 
 type CycleExecutor struct {
 	TONClient *chain.TonClient
@@ -332,8 +335,87 @@ func (ce *CycleExecutor) BuildMessageFromCycleStep(ctx context.Context, tokenToS
 	}
 }
 
+type executedStep struct {
+	tokenFrom models.TokenMetadata
+	tokenTo   models.TokenMetadata
+	pool      models.Pool
+	amountIn  float64
+	amountOut float64
+}
+
+func (ce *CycleExecutor) waitForBalanceChange(ctx context.Context, token models.TokenMetadata, balanceBefore float64, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		balanceAfter, err := ce.GetTokenBalance(ctx, token)
+		fmt.Println("current balance is: ", balanceAfter, token.Symbol)
+		time.Sleep(5 * time.Second)
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%w for token %s", errBalanceDidNotChange, token.Symbol)
+		}
+		if err != nil {
+			continue
+		}
+		if balanceAfter != balanceBefore {
+			return nil
+		}
+	}
+}
+
+func (ce *CycleExecutor) rollbackCycle(ctx context.Context, steps []executedStep) error {
+	if len(steps) == 0 {
+		return nil
+	}
+
+	amountToSwap := steps[len(steps)-1].amountOut
+	for i := len(steps) - 1; i >= 0; i-- {
+		step := steps[i]
+		tokenToSwap := step.tokenTo
+		tokenToGet := step.tokenFrom
+
+		res, nextToken, err := step.pool.EstimateSwap(tokenToSwap.Address, 1.0, amountToSwap)
+		if err != nil {
+			return fmt.Errorf("rollback estimate swap: %w", err)
+		}
+		if nextToken.Address != tokenToGet.Address {
+			return fmt.Errorf("rollback unexpected token: got %s want %s", nextToken.Symbol, tokenToGet.Symbol)
+		}
+
+		balanceBefore, err := ce.GetTokenBalance(ctx, tokenToGet)
+		if err != nil {
+			return fmt.Errorf("rollback get balance before transaction: %w", err)
+		}
+
+		fmt.Println("rollback swapping:", amountToSwap, tokenToSwap.Symbol, "--->", res, tokenToGet.Symbol)
+		msg, err := ce.BuildMessageFromCycleStep(ctx, tokenToSwap, tokenToGet, step.pool, amountToSwap, res)
+		if err != nil {
+			return fmt.Errorf("rollback build message from cycle step: %w", err)
+		}
+		err = ce.Wallet.Send(ctx, msg)
+		if err != nil {
+			return fmt.Errorf("rollback send transaction: %w", err)
+		}
+		fmt.Println("rollback transaction confirmed")
+
+		err = ce.waitForBalanceChange(ctx, tokenToGet, balanceBefore, 2*time.Minute)
+		if err != nil {
+			return fmt.Errorf("rollback wait for balance change: %w", err)
+		}
+
+		amountToSwap = res
+	}
+
+	return nil
+}
+
 func (ce *CycleExecutor) ExecuteCycle(ctx context.Context, cycle models.ArbitrageCycle) error {
 	amountToSwap := cycle.StartCapital
+	executedSteps := make([]executedStep, 0, len(cycle.PoolsOrder))
 
 	for i := range cycle.PoolsOrder {
 		token := cycle.TokensOrder[i]
@@ -361,21 +443,24 @@ func (ce *CycleExecutor) ExecuteCycle(ctx context.Context, cycle models.Arbitrag
 			return fmt.Errorf("send transaction: %w", err)
 		}
 		fmt.Println("transaction confirmed")
-		deadline := time.Now().Add(2 * time.Minute)
-		for {
-			balanceAfterTransaction, err := ce.GetTokenBalance(ctx, *nextToken)
-			fmt.Println("current balance is: ", balanceAfterTransaction, nextToken.Symbol)
-			time.Sleep(5 * time.Second)
-			if time.Now().After(deadline) {
-				return fmt.Errorf("balance did not change after 2 minutes for token %s", nextToken.Symbol)
+		err = ce.waitForBalanceChange(ctx, *nextToken, balanceBeforeTransaction, 2*time.Minute)
+		if err != nil {
+			if errors.Is(err, errBalanceDidNotChange) {
+				rollbackErr := ce.rollbackCycle(ctx, executedSteps)
+				if rollbackErr != nil {
+					return fmt.Errorf("balance did not change; rollback failed: %w", rollbackErr)
+				}
 			}
-			if err != nil {
-				continue
-			}
-			if balanceAfterTransaction != balanceBeforeTransaction {
-				break
-			}
+			return fmt.Errorf("wait for balance change: %w", err)
 		}
+
+		executedSteps = append(executedSteps, executedStep{
+			tokenFrom: token,
+			tokenTo:   *nextToken,
+			pool:      p,
+			amountIn:  amountToSwap,
+			amountOut: res,
+		})
 
 		amountToSwap = res
 	}
