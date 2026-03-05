@@ -8,6 +8,7 @@ import (
 	"arbitrage/internal/models"
 	"context"
 	"fmt"
+	"log/slog"
 )
 
 type AggregatorSettings struct {
@@ -24,7 +25,7 @@ func FetchPools(ctx context.Context, client *chain.TonClient, settings Aggregato
 	pools := make([]models.Pool, 0)
 
 	if settings.UseDeDust {
-		fmt.Println("Fetching dedust pools")
+		slog.Info("Fetching dedust pools")
 		explorer, err := dedustapi.NewDedustExplorer(client, settings.DedustPoolsFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("create dedust explorer: %w", err)
@@ -37,8 +38,8 @@ func FetchPools(ctx context.Context, client *chain.TonClient, settings Aggregato
 	}
 
 	if settings.UseStonFi {
-		fmt.Println("Fetching stonfi pools")
-		stonFiPools, err := stonfiapi.FetchPools(settings.StonfiPoolsFilePath)
+		slog.Info("Fetching stonfi pools")
+		stonFiPools, err := stonfiapi.FetchPools(ctx, settings.StonfiPoolsFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("fetch stonfi pools: %w", err)
 		}
@@ -46,8 +47,8 @@ func FetchPools(ctx context.Context, client *chain.TonClient, settings Aggregato
 	}
 
 	if settings.UseCoffee {
-		fmt.Println("Fetching coffee pools")
-		coffeePools, err := coffeeapi.FetchPools()
+		slog.Info("Fetching coffee pools")
+		coffeePools, err := coffeeapi.FetchPools(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("fetch coffee pools: %w", err)
 		}

@@ -2,10 +2,13 @@ package stonfiapi
 
 import (
 	"arbitrage/internal/explorer/ton/utils"
+	"arbitrage/internal/httputil"
 	"arbitrage/internal/models"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -38,10 +41,15 @@ type AssetListResponse struct {
 	AssetList []Asset `json:"asset_list"`
 }
 
-func GetAssets() ([]Asset, error) {
+func GetAssets(ctx context.Context) ([]Asset, error) {
 	url := "https://api.ston.fi/v1/assets"
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := httputil.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch assets: %w", err)
 	}
@@ -92,10 +100,15 @@ type PoolListResponse struct {
 	PoolList []Pool `json:"pool_list"`
 }
 
-func GetPools() ([]Pool, error) {
+func GetPools(ctx context.Context) ([]Pool, error) {
 	url := "https://api.ston.fi/v1/pools"
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := httputil.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error making GET request: %w", err)
 	}
@@ -134,12 +147,12 @@ func ReadPoolsInfoFromFile(filePath string) (map[string]string, error) {
 	return data, nil
 }
 
-func FetchPools(filePath string) ([]models.Pool, error) {
-	assets, err := GetAssets()
+func FetchPools(ctx context.Context, filePath string) ([]models.Pool, error) {
+	assets, err := GetAssets(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get assets: %w", err)
 	}
-	pools, err := GetPools()
+	pools, err := GetPools(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get pools: %w", err)
 	}
@@ -157,18 +170,18 @@ func FetchPools(filePath string) ([]models.Pool, error) {
 	resultPools := make([]models.Pool, 0)
 	for _, p := range pools {
 		if _, ok := poolsMap[p.Address]; ok {
-			fmt.Println("skip pool", p.Address)
+			slog.Warn("skip pool", "address", p.Address)
 			continue
 		}
 
 		lpFee, err := strconv.ParseFloat(p.LpFee, 64)
 		if err != nil {
-			fmt.Printf("failed to parse LpFee: %e\n", err)
+			slog.Warn("failed to parse LpFee", "pool", p.Address, "error", err)
 			continue
 		}
 		protocolFee, err := strconv.ParseFloat(p.ProtocolFee, 64)
 		if err != nil {
-			fmt.Printf("failed to parse ProtocolFee: %e\n", err)
+			slog.Warn("failed to parse ProtocolFee", "pool", p.Address, "error", err)
 			continue
 		}
 
@@ -176,7 +189,6 @@ func FetchPools(filePath string) ([]models.Pool, error) {
 
 		asset0, ok := assetsMap[p.Token0Address]
 		if !ok {
-			//fmt.Printf("unknown asset: %s\n", p.Token0Address)
 			continue
 		}
 		if asset0.ContractAddress == kTONBurnAddress {
@@ -184,7 +196,6 @@ func FetchPools(filePath string) ([]models.Pool, error) {
 		}
 		asset1, ok := assetsMap[p.Token1Address]
 		if !ok {
-			//fmt.Printf("unknown asset: %s\n", p.Token1Address)
 			continue
 		}
 		if asset1.ContractAddress == kTONBurnAddress {
@@ -193,16 +204,15 @@ func FetchPools(filePath string) ([]models.Pool, error) {
 
 		reserve0, err := utils.ParseReserve(p.Reserve0, asset0.Decimals)
 		if err != nil {
-			fmt.Printf("failed to parse Reserve0: %e\n", err)
+			slog.Warn("failed to parse Reserve0", "pool", p.Address, "error", err)
 			continue
 		}
 		reserve1, err := utils.ParseReserve(p.Reserve1, asset1.Decimals)
 		if err != nil {
-			fmt.Printf("failed to parse Reserve1: %e\n", err)
+			slog.Warn("failed to parse Reserve1", "pool", p.Address, "error", err)
 			continue
 		}
 		if reserve0 == 0 && reserve1 == 0 {
-			//fmt.Printf("both reserves are zero\n")
 			continue
 		}
 

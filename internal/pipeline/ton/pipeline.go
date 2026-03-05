@@ -8,6 +8,7 @@ import (
 	"arbitrage/internal/models"
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -42,8 +43,12 @@ func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.Arbitrag
 	})
 	for _, c := range cycles {
 		if c.StartCapital >= minStartCapital && c.StartCapital <= maxStartCapital && c.Profit-stepFee*float64(len(c.PoolsOrder)) > 0 {
-			fmt.Println("Executing cycle:")
-			analyzer.Calculate(c.PoolsOrder, c.StartCapital, startToken, true)
+			slog.Info("Executing cycle")
+			_, _, err := analyzer.Calculate(c.PoolsOrder, c.StartCapital, startToken, true)
+			if err != nil {
+				slog.Error("failed to calculate cycle", "error", err)
+				continue
+			}
 
 			if p.OnlyShowCycles {
 				continue
@@ -54,7 +59,7 @@ func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.Arbitrag
 				Wallet:    p.Wallet,
 			}
 
-			err := ce.ExecuteCycle(ctx, c)
+			err = ce.ExecuteCycle(ctx, c)
 			if err != nil {
 				return fmt.Errorf("build messages from arbitrage cycle: %w", err)
 			}
@@ -68,7 +73,7 @@ func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.Arbitrag
 func (p *Pipeline) Do(ctx context.Context) error {
 	i := 0
 	for {
-		fmt.Println("Fetching pools")
+		slog.Info("Fetching pools")
 		pools, err := aggregator.FetchPools(ctx, p.Client, aggregator.AggregatorSettings{
 			UseDeDust:           p.UseDeDust,
 			UseStonFi:           p.UseStonFi,
@@ -76,9 +81,9 @@ func (p *Pipeline) Do(ctx context.Context) error {
 			DedustPoolsFilePath: p.DedustPoolsFilePath,
 			StonfiPoolsFilePath: p.StonfiPoolsFilePath,
 		})
-		fmt.Println("Pools fetched")
+		slog.Info("Pools fetched")
 		if err != nil {
-			fmt.Printf("aggregator couldnt fetch pools: %e\n", err)
+			slog.Error("aggregator couldn't fetch pools", "error", err)
 			i = (i + 1) % len(p.StartTokens)
 			time.Sleep(1 * time.Minute)
 			continue
@@ -94,7 +99,7 @@ func (p *Pipeline) Do(ctx context.Context) error {
 
 		err = p.DoForStartToken(ctx, cycles, startToken, minStartCapital, maxStartCapital, stepFee)
 		if err != nil {
-			fmt.Printf("failed to find and execute cycle: %e\n", err)
+			slog.Error("failed to find and execute cycle", "error", err)
 			i = (i + 1) % len(p.StartTokens)
 			time.Sleep(1 * time.Minute)
 			continue

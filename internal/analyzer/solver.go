@@ -3,6 +3,7 @@ package analyzer
 import (
 	"arbitrage/internal/models"
 	"fmt"
+	"log/slog"
 )
 
 const (
@@ -11,7 +12,7 @@ const (
 	MaxValue      = 1000000000.0
 )
 
-func Calculate(pools []models.Pool, x float64, startAddress string, flag bool) (float64, string) {
+func Calculate(pools []models.Pool, x float64, startAddress string, flag bool) (float64, string, error) {
 	cur := x
 	curAddress := startAddress
 	var curName string
@@ -23,7 +24,7 @@ func Calculate(pools []models.Pool, x float64, startAddress string, flag bool) (
 	for _, p := range pools {
 		res, nextToken, err := p.EstimateSwap(curAddress, Slippage, cur)
 		if err != nil {
-			panic(err)
+			return 0, "", fmt.Errorf("estimate swap on pool %s: %w", p.Address, err)
 		}
 		if flag {
 			poolLink := p.Address
@@ -33,19 +34,25 @@ func Calculate(pools []models.Pool, x float64, startAddress string, flag bool) (
 			case models.DEXNameDeDust:
 				poolLink = fmt.Sprintf("https://dedust.io/pools/%s", p.Address)
 			}
-			fmt.Println("Trade:", cur, curName, "--->", res, nextToken.Name, "|", p.DEX, poolLink)
+			slog.Info(fmt.Sprintf("Trade %.4f %s -> %.4f %s", cur, curName, res, nextToken.Name), "dex", p.DEX, "pool", poolLink)
 		}
 		cur = res
 		curName = nextToken.Name
 		curAddress = nextToken.Address
 	}
-	return cur, curAddress
+	return cur, curAddress, nil
 }
 
-func CalculateDerivative(pools []models.Pool, x float64, startAddress string) float64 {
-	res0, _ := Calculate(pools, x+DerivativeEps, startAddress, false)
-	res1, _ := Calculate(pools, x-DerivativeEps, startAddress, false)
-	return (res0 - res1) / (2.0 * DerivativeEps)
+func CalculateDerivative(pools []models.Pool, x float64, startAddress string) (float64, error) {
+	res0, _, err := Calculate(pools, x+DerivativeEps, startAddress, false)
+	if err != nil {
+		return 0, err
+	}
+	res1, _, err := Calculate(pools, x-DerivativeEps, startAddress, false)
+	if err != nil {
+		return 0, err
+	}
+	return (res0 - res1) / (2.0 * DerivativeEps), nil
 }
 
 func FindDerivativePoint(pools []models.Pool, k float64, startAddress string) (float64, error) {
@@ -58,7 +65,10 @@ func FindDerivativePoint(pools []models.Pool, k float64, startAddress string) (f
 
 	for r-l > BinSearchEps {
 		m := (l + r) / 2.0
-		res := CalculateDerivative(pools, m, startAddress)
+		res, err := CalculateDerivative(pools, m, startAddress)
+		if err != nil {
+			return 0, fmt.Errorf("calculate derivative at %f: %w", m, err)
+		}
 		if res >= k {
 			l = m
 		} else {

@@ -1,7 +1,9 @@
 package coffeeapi
 
 import (
+	"arbitrage/internal/httputil"
 	"arbitrage/internal/models"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -78,11 +80,11 @@ type CoffeePoolResponse struct {
 }
 
 // GetPools fetches pools from Coffee DEX API
-func GetPools() ([]CoffeePool, error) {
+func GetPools(ctx context.Context) ([]CoffeePool, error) {
 	url := "https://backend.swap.coffee/v1/pools"
 
 	// Add query parameters to get only coffee-native pools
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -94,8 +96,7 @@ func GetPools() ([]CoffeePool, error) {
 	q.Add("size", "100")     // Get more pools
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httputil.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch pools: %w", err)
 	}
@@ -129,8 +130,8 @@ func GetPools() ([]CoffeePool, error) {
 }
 
 // FetchPools fetches pools from Coffee DEX and converts them to the common Pool model
-func FetchPools() ([]models.Pool, error) {
-	pools, err := GetPools()
+func FetchPools(ctx context.Context) ([]models.Pool, error) {
+	pools, err := GetPools(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get pools: %w", err)
 	}
