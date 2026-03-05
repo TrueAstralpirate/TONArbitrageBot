@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 )
@@ -82,7 +83,10 @@ func NewDedustExplorer(client *chain.TonClient, filePath string) (*DedustExplore
 }
 
 func (e *DedustExplorer) FetchPools(ctx context.Context) ([]models.Pool, error) {
-	pools := GetPools()
+	pools, err := GetPools(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get pools from API: %w", err)
+	}
 	resultPools := make([]models.Pool, 0)
 	newPoolsFound := false
 	for i := range pools {
@@ -90,18 +94,18 @@ func (e *DedustExplorer) FetchPools(ctx context.Context) ([]models.Pool, error) 
 		if validatePool(p) {
 			fee, err := strconv.ParseFloat(p.TradeFee, 64)
 			if err != nil {
-				fmt.Printf("failed to parse TradeFee: %e\n", err)
+				slog.Warn("failed to parse TradeFee", "pool", p.Address, "error", err)
 				continue
 			}
 
 			reserve0, err := utils.ParseReserve(p.Reserves[0], p.Assets[0].Decimals)
 			if err != nil {
-				fmt.Printf("failed to parse Reserve0: %e\n", err)
+				slog.Warn("failed to parse Reserve0", "pool", p.Address, "error", err)
 				continue
 			}
 			reserve1, err := utils.ParseReserve(p.Reserves[1], p.Assets[1].Decimals)
 			if err != nil {
-				fmt.Printf("failed to parse Reserve1: %e\n", err)
+				slog.Warn("failed to parse Reserve1", "pool", p.Address, "error", err)
 				continue
 			}
 
@@ -109,7 +113,7 @@ func (e *DedustExplorer) FetchPools(ctx context.Context) ([]models.Pool, error) 
 			if !ok {
 				assetsFromChain, err := e.Client.GetDedustAssets(ctx, p.Address)
 				if err != nil {
-					fmt.Println("failed to get pool assets from TON blockchain: %w", err)
+					slog.Warn("failed to get pool assets from TON blockchain", "pool", p.Address, "error", err)
 					continue
 				}
 				assets = PoolAssets{
@@ -149,7 +153,7 @@ func (e *DedustExplorer) FetchPools(ctx context.Context) ([]models.Pool, error) 
 
 	if newPoolsFound {
 		if err := WritePoolAssetsToFile(e.PoolToAssetAddresses, e.PoolsMapFilePath); err != nil {
-			fmt.Printf("Failed to save pool-assets map: %e\n", err)
+			slog.Error("failed to save pool-assets map", "error", err)
 		}
 	}
 

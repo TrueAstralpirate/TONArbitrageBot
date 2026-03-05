@@ -1,6 +1,8 @@
 package dedustapi
 
 import (
+	"arbitrage/internal/httputil"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -54,19 +56,18 @@ type Trade struct {
 	CreatedAt string `json:"createdAt"`
 }
 
-// fetchTrades fetches trades for a given pool address
-func FetchTrades(poolAddress string) ([]Trade, error) {
+// FetchTrades fetches trades for a given pool address
+func FetchTrades(ctx context.Context, poolAddress string) ([]Trade, error) {
 	url := fmt.Sprintf("https://api.dedust.io/v2/pools/%s/trades", poolAddress)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
 	req.Header.Set("accept", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httputil.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("performing request: %w", err)
 	}
@@ -89,31 +90,32 @@ func FetchTrades(poolAddress string) ([]Trade, error) {
 	return trades, nil
 }
 
-func GetPools() []Pool {
+func GetPools(ctx context.Context) ([]Pool, error) {
 	url := "https://api.dedust.io/v2/pools"
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		fmt.Println("Error making request:", err)
-		return nil
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := httputil.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching pools: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Unexpected status code:", resp.Status)
-		return nil
+		return nil, fmt.Errorf("unexpected status code: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
-		return nil
+		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
 	var pools []Pool
 	if err := json.Unmarshal(body, &pools); err != nil {
-		fmt.Println("Error parsing JSON:", err)
-		return nil
+		return nil, fmt.Errorf("parsing JSON: %w", err)
 	}
-	return pools
+	return pools, nil
 }

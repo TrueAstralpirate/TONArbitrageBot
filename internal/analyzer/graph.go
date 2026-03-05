@@ -3,6 +3,7 @@ package analyzer
 import (
 	"arbitrage/internal/models"
 	"fmt"
+	"log/slog"
 )
 
 var (
@@ -50,8 +51,7 @@ func BuildGraph(pools []models.Pool) Graph {
 		keys = append(keys, k)
 	}
 
-	fmt.Println("number of nodes in graph:", len(keys))
-	fmt.Println("number of edges in graph:", len(result.Edges))
+	slog.Info("graph built", "nodes", len(keys), "edges", len(result.Edges))
 
 	result.Nodes = keys
 	return result
@@ -62,7 +62,10 @@ func buildArbitrageCycleFromPools(tokensOrder []models.TokenMetadata, pools []mo
 	if err != nil {
 		return nil, fmt.Errorf("find derivative point: %w", err)
 	}
-	revenue, _ := Calculate(pools, optimalStart, start, false)
+	revenue, _, err := Calculate(pools, optimalStart, start, false)
+	if err != nil {
+		return nil, fmt.Errorf("calculate revenue: %w", err)
+	}
 	return &models.ArbitrageCycle{
 		TokensOrder:  tokensOrder,
 		PoolsOrder:   pools,
@@ -85,7 +88,7 @@ func (g *Graph) find2Cycles(start string, edgesToStart, edgesFromStart map[strin
 				pools := []models.Pool{*e0.PoolRef, *e1.PoolRef}
 				cycle, err := buildArbitrageCycleFromPools([]models.TokenMetadata{e0.From, e0.To}, pools, 1.0, start)
 				if err != nil {
-					fmt.Printf("error while building cycle: %e", err)
+					slog.Error("error building 2-cycle", "error", err)
 					continue
 				}
 				result = append(result, *cycle)
@@ -107,7 +110,7 @@ func (g *Graph) find3Cycles(start string, edgesToStart, edgesFromStart map[strin
 				pools := []models.Pool{*e0.PoolRef, *e.PoolRef, *e1.PoolRef}
 				cycle, err := buildArbitrageCycleFromPools([]models.TokenMetadata{e0.From, e0.To, e1.From}, pools, 1.0, start)
 				if err != nil {
-					fmt.Printf("error while building cycle: %e", err)
+					slog.Error("error building 3-cycle", "error", err)
 					continue
 				}
 				result = append(result, *cycle)
@@ -133,7 +136,7 @@ func (g *Graph) find4Cycles(start string, edgesToStart, edgesFromStart, edgesFro
 					pools := []models.Pool{*e0.PoolRef, *e1.PoolRef, *e2.PoolRef, *e3.PoolRef}
 					cycle, err := buildArbitrageCycleFromPools([]models.TokenMetadata{e0.From, e0.To, e1.To, e2.To}, pools, 1.0, start)
 					if err != nil {
-						fmt.Printf("error while building cycle: %e", err)
+						slog.Error("error building 4-cycle", "error", err)
 						continue
 					}
 					result = append(result, *cycle)
