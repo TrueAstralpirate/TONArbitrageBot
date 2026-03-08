@@ -345,6 +345,22 @@ type executedStep struct {
 	amountOut float64
 }
 
+func (ce *CycleExecutor) sendWithSeqnoRetry(ctx context.Context, msg *wallet.Message) error {
+	for attempt := range 3 {
+		err := ce.Wallet.Send(ctx, msg)
+		if err == nil {
+			return nil
+		}
+		if strings.Contains(err.Error(), "Too old seqno") && attempt < 2 {
+			slog.Warn("seqno mismatch, retrying send", "attempt", attempt+1)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		return err
+	}
+	return nil
+}
+
 func (ce *CycleExecutor) waitForBalanceChange(ctx context.Context, token models.TokenMetadata, balanceBefore float64, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -398,7 +414,7 @@ func (ce *CycleExecutor) rollbackCycle(ctx context.Context, steps []executedStep
 		if err != nil {
 			return fmt.Errorf("rollback build message from cycle step: %w", err)
 		}
-		err = ce.Wallet.Send(ctx, msg)
+		err = ce.sendWithSeqnoRetry(ctx, msg)
 		if err != nil {
 			return fmt.Errorf("rollback send transaction: %w", err)
 		}
@@ -440,7 +456,7 @@ func (ce *CycleExecutor) ExecuteCycle(ctx context.Context, cycle models.Arbitrag
 		}
 
 		slog.Info("swapping", "amount", amountToSwap, "from", token.Symbol, "to_amount", res, "to", nextToken.Symbol)
-		err = ce.Wallet.Send(ctx, msg)
+		err = ce.sendWithSeqnoRetry(ctx, msg)
 		if err != nil {
 			return fmt.Errorf("send transaction: %w", err)
 		}
