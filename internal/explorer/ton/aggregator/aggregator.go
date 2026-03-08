@@ -15,8 +15,7 @@ type AggregatorSettings struct {
 	UseDeDust           bool
 	DedustPoolsFilePath string
 
-	UseStonFi           bool
-	StonfiPoolsFilePath string
+	UseStonFi bool
 
 	UseCoffee bool
 }
@@ -39,7 +38,7 @@ func FetchPools(ctx context.Context, client *chain.TonClient, settings Aggregato
 
 	if settings.UseStonFi {
 		slog.Info("Fetching stonfi pools")
-		stonFiPools, err := stonfiapi.FetchPools(ctx, settings.StonfiPoolsFilePath)
+		stonFiPools, err := stonfiapi.FetchPools(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("fetch stonfi pools: %w", err)
 		}

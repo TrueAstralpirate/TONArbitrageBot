@@ -30,8 +30,7 @@ func parseFloats(s string) ([]float64, error) {
 func main() {
 	seedFile := flag.String("seed-file", "", "Path to wallet seed words file (required)")
 	tonConfig := flag.String("ton-config", "https://ton-blockchain.github.io/global.config.json", "TON network config URL")
-	dedustPoolsFile := flag.String("dedust-pools-file", "dedust_pools.json", "Path to DeDust pools blocklist file")
-	stonfiPoolsFile := flag.String("stonfi-pools-file", "stonfi_pools.json", "Path to StonFi pools blocklist file")
+	dedustPoolsFile := flag.String("dedust-pools-file", "dedust_pool_assets_cache.json", "Path to DeDust pool-to-token-address cache file")
 	useDedust := flag.Bool("use-dedust", true, "Enable DeDust DEX")
 	useStonfi := flag.Bool("use-stonfi", true, "Enable StonFi DEX")
 	useCoffee := flag.Bool("use-coffee", false, "Enable Coffee DEX")
@@ -102,7 +101,6 @@ func main() {
 		Client:              client,
 		Wallet:              w,
 		DedustPoolsFilePath: *dedustPoolsFile,
-		StonfiPoolsFilePath: *stonfiPoolsFile,
 		TONConfig:           *tonConfig,
 		UseDeDust:           *useDedust,
 		UseStonFi:           *useStonfi,
