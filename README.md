@@ -37,6 +37,15 @@ go run ./cmd/arbitrage --seed-file words.txt --only-show-cycles
 | `--max-usd-capital` | float | `200` | Maximum start capital for USD cycles |
 | `--step-usd-fees` | float | `0.18` | Fee per swap step for USD cycles |
 
+## Example Trades
+
+#### Triangle Arbitrage (3-hop, cross-DEX)
+```
+Trade 0.1774 TON -> 124972.0175 BLUE TRACTOR COIN   dex=StonFi pool=https://app.ston.fi/pools/EQA9kOZMqkvQGgS_sl_0VbleY6XAuC71wlfBTDGeSD-UNuxg
+Trade 124972.0175 BLUE TRACTOR COIN -> 0.3950 Tether USD   dex=StonFi pool=https://app.ston.fi/pools/EQCWhEnyFdtNT16Jt-YDIoRVB9L93fjpE-I7Xprmwd6JdgIO
+Trade 0.3950 Tether USD -> 0.2985 Toncoin   dex=DeDust pool=https://dedust.io/pools/EQA-X_yo3fzzbDbJ_0bzFWKqtRuZFIRa1sJsveZJ1YpViO3r
+```
+
 ## DeDust Pool Assets Cache
 
 The file `dedust_pool_assets_cache.json` is a local cache that maps DeDust pool addresses to their token contract addresses. The DeDust API does not return token addresses directly — they must be queried from the TON blockchain. To avoid slow on-chain lookups on every startup, resolved addresses are stored in this cache and reused on subsequent runs.
