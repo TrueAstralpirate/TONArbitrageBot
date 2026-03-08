@@ -37,6 +37,23 @@ go run ./cmd/arbitrage --seed-file words.txt --only-show-cycles
 | `--max-usd-capital` | float | `200` | Maximum start capital for USD cycles |
 | `--step-usd-fees` | float | `0.18` | Fee per swap step for USD cycles |
 
+## Example Trades
+
+#### Triangle Arbitrage (3-hop, cross-DEX)
+```
+Trade 0.1303 Toncoin -> 26.1917 STORM   dex=DeDust pool=https://dedust.io/pools/EQAm_QHFNFg5SM0i7tc2Jl9W1xVl0aA7e3lFvRAGixF8T4ig
+Trade 26.1917 STORM -> 17959859.0355 Mir   dex=StonFi pool=https://app.ston.fi/pools/EQCBpwug8nrEAW8W-dk4d5IdEoA8OijKR5ZNhUCpNxCibQq5
+Trade 17959859.0355 Mir -> 0.2577 TON   dex=StonFi pool=https://app.ston.fi/pools/EQAG4KuT5Fyv8-UlxnSUTQn_tM61teKKcfYoGFbb75SNAiXW
+```
+
+#### Quadrangle Arbitrage (4-hop, cross-DEX)
+```
+Trade 0.6583 Toncoin -> 0.5985 Tonstakers TON   dex=DeDust pool=https://dedust.io/pools/EQDsPeOuu66e7tWagXO6Tn8VFZMEV0ClQb7zOB6SEW_VKN3k
+Trade 0.5985 Tonstakers TON -> 27884871.8142 Mir   dex=StonFi pool=https://app.ston.fi/pools/EQDgJ2RTKqLnI9fPoA2dCpnUkYbbvJ5Q9Au42dig9Ul-ZvBb
+Trade 27884871.8142 Mir -> 1.2097 Tether USD   dex=StonFi pool=https://app.ston.fi/pools/EQAM2y3_PNqm0sU_shgS6f-TyVV-Ogj2ZwHj6RXEY1MWuhrP
+Trade 1.2097 Tether USD -> 0.8996 Toncoin   dex=DeDust pool=https://dedust.io/pools/EQA-X_yo3fzzbDbJ_0bzFWKqtRuZFIRa1sJsveZJ1YpViO3r
+```
+
 ## DeDust Pool Assets Cache
 
 The file `dedust_pool_assets_cache.json` is a local cache that maps DeDust pool addresses to their token contract addresses. The DeDust API does not return token addresses directly — they must be queried from the TON blockchain. To avoid slow on-chain lookups on every startup, resolved addresses are stored in this cache and reused on subsequent runs.
