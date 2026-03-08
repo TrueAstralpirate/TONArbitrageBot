@@ -24,7 +24,6 @@ type Pipeline struct {
 	Wallet *wallet.Wallet
 
 	DedustPoolsFilePath string
-	StonfiPoolsFilePath string
 	TONConfig           string
 	UseDeDust           bool
 	UseStonFi           bool
@@ -79,7 +78,6 @@ func (p *Pipeline) Do(ctx context.Context) error {
 			UseStonFi:           p.UseStonFi,
 			UseCoffee:           p.UseCoffee,
 			DedustPoolsFilePath: p.DedustPoolsFilePath,
-			StonfiPoolsFilePath: p.StonfiPoolsFilePath,
 		})
 		slog.Info("Pools fetched")
 		if err != nil {

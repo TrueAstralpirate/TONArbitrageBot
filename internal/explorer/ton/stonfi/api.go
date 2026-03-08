@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strconv"
 )
 
@@ -72,27 +71,29 @@ func GetAssets(ctx context.Context) ([]Asset, error) {
 }
 
 type Pool struct {
-	Address                    string `json:"address"`
-	Amp                        string `json:"amp"`
-	CollectedToken0ProtocolFee string `json:"collected_token0_protocol_fee"`
-	CollectedToken1ProtocolFee string `json:"collected_token1_protocol_fee"`
-	LpAccountAddress           string `json:"lp_account_address"`
-	LpBalance                  string `json:"lp_balance"`
-	LpFee                      string `json:"lp_fee"`
-	LpPriceUsd                 string `json:"lp_price_usd"`
-	LpTotalSupply              string `json:"lp_total_supply"`
-	LpTotalSupplyUsd           string `json:"lp_total_supply_usd"`
-	LpWalletAddress            string `json:"lp_wallet_address"`
-	ProtocolFee                string `json:"protocol_fee"`
-	ProtocolFeeAddress         string `json:"protocol_fee_address"`
-	RefFee                     string `json:"ref_fee"`
-	Reserve0                   string `json:"reserve0"`
-	Reserve1                   string `json:"reserve1"`
-	RouterAddress              string `json:"router_address"`
-	Token0Address              string `json:"token0_address"`
-	Token0Balance              string `json:"token0_balance"`
-	Token1Address              string `json:"token1_address"`
-	Token1Balance              string `json:"token1_balance"`
+	Address                    string  `json:"address"`
+	Amp                        *string `json:"amp"`
+	W0                         *string `json:"w0"`
+	Deprecated                 bool    `json:"deprecated"`
+	CollectedToken0ProtocolFee string  `json:"collected_token0_protocol_fee"`
+	CollectedToken1ProtocolFee string  `json:"collected_token1_protocol_fee"`
+	LpAccountAddress           string  `json:"lp_account_address"`
+	LpBalance                  string  `json:"lp_balance"`
+	LpFee                      string  `json:"lp_fee"`
+	LpPriceUsd                 string  `json:"lp_price_usd"`
+	LpTotalSupply              string  `json:"lp_total_supply"`
+	LpTotalSupplyUsd           string  `json:"lp_total_supply_usd"`
+	LpWalletAddress            string  `json:"lp_wallet_address"`
+	ProtocolFee                string  `json:"protocol_fee"`
+	ProtocolFeeAddress         string  `json:"protocol_fee_address"`
+	RefFee                     string  `json:"ref_fee"`
+	Reserve0                   string  `json:"reserve0"`
+	Reserve1                   string  `json:"reserve1"`
+	RouterAddress              string  `json:"router_address"`
+	Token0Address              string  `json:"token0_address"`
+	Token0Balance              string  `json:"token0_balance"`
+	Token1Address              string  `json:"token1_address"`
+	Token1Balance              string  `json:"token1_balance"`
 }
 
 // PoolListResponse represents the full response from /v1/pools
@@ -130,24 +131,7 @@ func GetPools(ctx context.Context) ([]Pool, error) {
 	return poolData.PoolList, nil
 }
 
-func ReadPoolsInfoFromFile(filePath string) (map[string]string, error) {
-	fileContent, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %v", err)
-	}
-
-	// Declare the map
-	var data map[string]string
-
-	// Unmarshal JSON
-	err = json.Unmarshal(fileContent, &data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse json: %v", err)
-	}
-	return data, nil
-}
-
-func FetchPools(ctx context.Context, filePath string) ([]models.Pool, error) {
+func FetchPools(ctx context.Context) ([]models.Pool, error) {
 	assets, err := GetAssets(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get assets: %w", err)
@@ -162,16 +146,16 @@ func FetchPools(ctx context.Context, filePath string) ([]models.Pool, error) {
 		assetsMap[asset.ContractAddress] = asset
 	}
 
-	poolsMap, err := ReadPoolsInfoFromFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("read pools info from file: %w", err)
-	}
-
 	resultPools := make([]models.Pool, 0)
 	for _, p := range pools {
-		if _, ok := poolsMap[p.Address]; ok {
-			slog.Warn("skip pool", "address", p.Address)
+		if p.Deprecated {
 			continue
+		}
+		if p.Amp != nil {
+			continue // stable/weighted AMM — incompatible with constant-product EstimateSwap
+		}
+		if p.W0 != nil {
+			continue // weighted pool — incompatible with constant-product EstimateSwap
 		}
 
 		lpFee, err := strconv.ParseFloat(p.LpFee, 64)
