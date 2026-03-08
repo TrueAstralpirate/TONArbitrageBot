@@ -24,7 +24,6 @@ func main() {
 	dedustPoolsFile := flag.String("dedust-pools-file", "dedust_pool_assets_cache.json", "Path to DeDust pool-to-token-address cache file")
 	useDedust := flag.Bool("use-dedust", true, "Enable DeDust DEX")
 	useStonfi := flag.Bool("use-stonfi", true, "Enable StonFi DEX")
-	useCoffee := flag.Bool("use-coffee", false, "Enable Coffee DEX")
 	onlyShowCycles := flag.Bool("only-show-cycles", false, "Only display cycles without executing")
 	minTonCapital := flag.Float64("min-ton-capital", 0.1, "Minimum start capital for TON cycles")
 	maxTonCapital := flag.Float64("max-ton-capital", 120, "Maximum start capital for TON cycles")
@@ -73,9 +72,8 @@ func main() {
 		Wallet:              w,
 		DedustPoolsFilePath: *dedustPoolsFile,
 		TONConfig:           *tonConfig,
-		UseDeDust:           *useDedust,
-		UseStonFi:           *useStonfi,
-		UseCoffee:           *useCoffee,
+		UseDeDust:      *useDedust,
+		UseStonFi:      *useStonfi,
 		StartTokens:         []string{tonAddress, usdtAddress},
 		MinStartCapital:     []float64{*minTonCapital, *minUsdCapital},
 		MaxStartCapital:     []float64{*maxTonCapital, *maxUsdCapital},

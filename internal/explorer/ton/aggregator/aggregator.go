@@ -2,7 +2,6 @@ package aggregator
 
 import (
 	"arbitrage/internal/explorer/ton/chain"
-	coffeeapi "arbitrage/internal/explorer/ton/coffee"
 	dedustapi "arbitrage/internal/explorer/ton/dedust"
 	stonfiapi "arbitrage/internal/explorer/ton/stonfi"
 	"arbitrage/internal/models"
@@ -16,8 +15,6 @@ type AggregatorSettings struct {
 	DedustPoolsFilePath string
 
 	UseStonFi bool
-
-	UseCoffee bool
 }
 
 func FetchPools(ctx context.Context, client *chain.TonClient, settings AggregatorSettings) ([]models.Pool, error) {
@@ -43,15 +40,6 @@ func FetchPools(ctx context.Context, client *chain.TonClient, settings Aggregato
 			return nil, fmt.Errorf("fetch stonfi pools: %w", err)
 		}
 		pools = append(pools, stonFiPools...)
-	}
-
-	if settings.UseCoffee {
-		slog.Info("Fetching coffee pools")
-		coffeePools, err := coffeeapi.FetchPools(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("fetch coffee pools: %w", err)
-		}
-		pools = append(pools, coffeePools...)
 	}
 
 	return pools, nil
