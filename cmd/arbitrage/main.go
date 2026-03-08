@@ -8,24 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/xssnick/tonutils-go/ton/wallet"
 )
-
-func parseFloats(s string) ([]float64, error) {
-	parts := strings.Split(s, ",")
-	result := make([]float64, 0, len(parts))
-	for _, p := range parts {
-		v, err := strconv.ParseFloat(strings.TrimSpace(p), 64)
-		if err != nil {
-			return nil, fmt.Errorf("parse %q: %w", p, err)
-		}
-		result = append(result, v)
-	}
-	return result, nil
-}
 
 func main() {
 	seedFile := flag.String("seed-file", "", "Path to wallet seed words file (required)")
@@ -35,10 +21,12 @@ func main() {
 	useStonfi := flag.Bool("use-stonfi", true, "Enable StonFi DEX")
 	useCoffee := flag.Bool("use-coffee", false, "Enable Coffee DEX")
 	onlyShowCycles := flag.Bool("only-show-cycles", false, "Only display cycles without executing")
-	startTokensStr := flag.String("start-tokens", "TON,EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs", "Comma-separated start token addresses")
-	minCapitalStr := flag.String("min-capital", "0.1,0.2", "Comma-separated min start capital per token")
-	maxCapitalStr := flag.String("max-capital", "120,200", "Comma-separated max start capital per token")
-	stepFeesStr := flag.String("step-fees", "0.06,0.18", "Comma-separated step fees per token")
+	minTonCapital := flag.Float64("min-ton-capital", 0.1, "Minimum start capital for TON cycles")
+	maxTonCapital := flag.Float64("max-ton-capital", 120, "Maximum start capital for TON cycles")
+	stepTonFees := flag.Float64("step-ton-fees", 0.06, "Fee per swap step for TON cycles (in TON)")
+	minUsdCapital := flag.Float64("min-usd-capital", 0.2, "Minimum start capital for USD cycles")
+	maxUsdCapital := flag.Float64("max-usd-capital", 200, "Maximum start capital for USD cycles")
+	stepUsdFees := flag.Float64("step-usd-fees", 0.18, "Fee per swap step for USD cycles")
 
 	flag.Parse()
 
@@ -48,31 +36,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	startTokens := strings.Split(*startTokensStr, ",")
-	minCapital, err := parseFloats(*minCapitalStr)
-	if err != nil {
-		slog.Error("invalid --min-capital", "error", err)
-		os.Exit(1)
-	}
-	maxCapital, err := parseFloats(*maxCapitalStr)
-	if err != nil {
-		slog.Error("invalid --max-capital", "error", err)
-		os.Exit(1)
-	}
-	stepFees, err := parseFloats(*stepFeesStr)
-	if err != nil {
-		slog.Error("invalid --step-fees", "error", err)
-		os.Exit(1)
-	}
-
-	if len(startTokens) != len(minCapital) || len(startTokens) != len(maxCapital) || len(startTokens) != len(stepFees) {
-		slog.Error("--start-tokens, --min-capital, --max-capital, and --step-fees must have the same number of comma-separated values",
-			"start-tokens", len(startTokens), "min-capital", len(minCapital), "max-capital", len(maxCapital), "step-fees", len(stepFees))
-		os.Exit(1)
-	}
-
 	ctx := context.Background()
 
+	var err error
 	var client *chain.TonClient
 	for {
 		client, err = chain.NewTonClient(ctx, *tonConfig)
@@ -105,10 +71,10 @@ func main() {
 		UseDeDust:           *useDedust,
 		UseStonFi:           *useStonfi,
 		UseCoffee:           *useCoffee,
-		StartTokens:         startTokens,
-		MinStartCapital:     minCapital,
-		MaxStartCapital:     maxCapital,
-		StepFees:            stepFees,
+		StartTokens:         []string{"TON", "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs"},
+		MinStartCapital:     []float64{*minTonCapital, *minUsdCapital},
+		MaxStartCapital:     []float64{*maxTonCapital, *maxUsdCapital},
+		StepFees:            []float64{*stepTonFees, *stepUsdFees},
 		OnlyShowCycles:      *onlyShowCycles,
 	}
 
