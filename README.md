@@ -1,6 +1,6 @@
 # TON Arbitrage Bot
 
-Finds and executes arbitrage cycles across DeDust, StonFi, and Coffee DEX on TON.
+Finds and executes arbitrage cycles across DeDust and StonFi DEX on TON.
 
 ## Requirements
 
@@ -28,7 +28,6 @@ go run ./cmd/arbitrage --seed-file words.txt --only-show-cycles
 | `--dedust-pools-file` | string | `dedust_pool_assets_cache.json` | Path to DeDust pool-to-token-address cache file |
 | `--use-dedust` | bool | `true` | Enable DeDust DEX |
 | `--use-stonfi` | bool | `true` | Enable StonFi DEX |
-| `--use-coffee` | bool | `false` | Enable Coffee DEX |
 | `--only-show-cycles` | bool | `false` | Display cycles without executing trades |
 | `--min-ton-capital` | float | `0.1` | Minimum start capital for TON cycles |
 | `--max-ton-capital` | float | `120` | Maximum start capital for TON cycles |

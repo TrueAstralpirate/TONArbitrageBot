@@ -25,10 +25,9 @@ type Pipeline struct {
 
 	DedustPoolsFilePath string
 	TONConfig           string
-	UseDeDust           bool
-	UseStonFi           bool
-	UseCoffee           bool
-	OnlyShowCycles      bool
+	UseDeDust      bool
+	UseStonFi      bool
+	OnlyShowCycles bool
 
 	StartTokens     []string
 	MinStartCapital []float64
@@ -77,7 +76,6 @@ func (p *Pipeline) Do(ctx context.Context) error {
 		pools, err := aggregator.FetchPools(ctx, p.Client, aggregator.AggregatorSettings{
 			UseDeDust:           p.UseDeDust,
 			UseStonFi:           p.UseStonFi,
-			UseCoffee:           p.UseCoffee,
 			DedustPoolsFilePath: p.DedustPoolsFilePath,
 		})
 		slog.Info("Pools fetched")
