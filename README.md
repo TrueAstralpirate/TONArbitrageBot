@@ -41,9 +41,9 @@ go run ./cmd/arbitrage --seed-file words.txt --only-show-cycles
 
 #### Triangle Arbitrage (3-hop, cross-DEX)
 ```
-Trade 0.1774 TON -> 124972.0175 BLUE TRACTOR COIN   dex=StonFi pool=https://app.ston.fi/pools/EQA9kOZMqkvQGgS_sl_0VbleY6XAuC71wlfBTDGeSD-UNuxg
-Trade 124972.0175 BLUE TRACTOR COIN -> 0.3950 Tether USD   dex=StonFi pool=https://app.ston.fi/pools/EQCWhEnyFdtNT16Jt-YDIoRVB9L93fjpE-I7Xprmwd6JdgIO
-Trade 0.3950 Tether USD -> 0.2985 Toncoin   dex=DeDust pool=https://dedust.io/pools/EQA-X_yo3fzzbDbJ_0bzFWKqtRuZFIRa1sJsveZJ1YpViO3r
+Trade 0.1303 Toncoin -> 26.1917 STORM   dex=DeDust pool=https://dedust.io/pools/EQAm_QHFNFg5SM0i7tc2Jl9W1xVl0aA7e3lFvRAGixF8T4ig
+Trade 26.1917 STORM -> 17959859.0355 Mir   dex=StonFi pool=https://app.ston.fi/pools/EQCBpwug8nrEAW8W-dk4d5IdEoA8OijKR5ZNhUCpNxCibQq5
+Trade 17959859.0355 Mir -> 0.2577 TON   dex=StonFi pool=https://app.ston.fi/pools/EQAG4KuT5Fyv8-UlxnSUTQn_tM61teKKcfYoGFbb75SNAiXW
 ```
 
 ## DeDust Pool Assets Cache
