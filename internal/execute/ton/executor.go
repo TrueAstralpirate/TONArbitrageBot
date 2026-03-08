@@ -358,10 +358,6 @@ func (ce *CycleExecutor) sendWithSeqnoRetry(ctx context.Context, msg *wallet.Mes
 		if err == nil {
 			return nil
 		}
-		// Duplicate seqno means the message was already accepted on a previous attempt.
-		if strings.Contains(err.Error(), "Duplicate msg_seqno") {
-			return nil
-		}
 		attempt++
 		slog.Warn("send failed, retrying", "attempt", attempt, "error", err)
 		return err
