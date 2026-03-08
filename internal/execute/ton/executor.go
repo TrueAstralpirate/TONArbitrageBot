@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/tlb"
 	"github.com/xssnick/tonutils-go/ton/jetton"
@@ -345,6 +346,24 @@ type executedStep struct {
 	amountOut float64
 }
 
+func (ce *CycleExecutor) sendWithSeqnoRetry(ctx context.Context, msg *wallet.Message) error {
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 1 * time.Second
+	b.MaxInterval = 10 * time.Second
+	b.MaxElapsedTime = 60 * time.Second
+
+	attempt := 0
+	return backoff.Retry(func() error {
+		err := ce.Wallet.Send(ctx, msg)
+		if err == nil {
+			return nil
+		}
+		attempt++
+		slog.Warn("send failed, retrying", "attempt", attempt, "error", err)
+		return err
+	}, backoff.WithContext(b, ctx))
+}
+
 func (ce *CycleExecutor) waitForBalanceChange(ctx context.Context, token models.TokenMetadata, balanceBefore float64, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -398,7 +417,7 @@ func (ce *CycleExecutor) rollbackCycle(ctx context.Context, steps []executedStep
 		if err != nil {
 			return fmt.Errorf("rollback build message from cycle step: %w", err)
 		}
-		err = ce.Wallet.Send(ctx, msg)
+		err = ce.sendWithSeqnoRetry(ctx, msg)
 		if err != nil {
 			return fmt.Errorf("rollback send transaction: %w", err)
 		}
@@ -440,7 +459,7 @@ func (ce *CycleExecutor) ExecuteCycle(ctx context.Context, cycle models.Arbitrag
 		}
 
 		slog.Info("swapping", "amount", amountToSwap, "from", token.Symbol, "to_amount", res, "to", nextToken.Symbol)
-		err = ce.Wallet.Send(ctx, msg)
+		err = ce.sendWithSeqnoRetry(ctx, msg)
 		if err != nil {
 			return fmt.Errorf("send transaction: %w", err)
 		}

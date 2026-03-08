@@ -36,7 +36,9 @@ type Pipeline struct {
 	StepFees        []float64
 }
 
-func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.ArbitrageCycle, startToken string, minStartCapital, maxStartCapital, stepFee float64) error {
+// DoForStartToken tries to find and execute the most profitable cycle for the given start token.
+// Returns true if a profitable cycle was found (and executed, unless OnlyShowCycles is set).
+func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.ArbitrageCycle, startToken string, minStartCapital, maxStartCapital, stepFee float64) (bool, error) {
 	sort.Slice(cycles, func(i, j int) bool {
 		return cycles[i].Profit-stepFee*float64(len(cycles[i].PoolsOrder)) > cycles[j].Profit-stepFee*float64(len(cycles[j].PoolsOrder))
 	})
@@ -50,7 +52,7 @@ func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.Arbitrag
 			}
 
 			if p.OnlyShowCycles {
-				continue
+				return true, nil
 			}
 
 			ce := tonexecutor.CycleExecutor{
@@ -60,17 +62,16 @@ func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.Arbitrag
 
 			err = ce.ExecuteCycle(ctx, c)
 			if err != nil {
-				return fmt.Errorf("build messages from arbitrage cycle: %w", err)
+				return false, fmt.Errorf("build messages from arbitrage cycle: %w", err)
 			}
-			return nil
+			return true, nil
 		}
 	}
 
-	return nil
+	return false, nil
 }
 
 func (p *Pipeline) Do(ctx context.Context) error {
-	i := 0
 	for {
 		slog.Info("Fetching pools")
 		pools, err := aggregator.FetchPools(ctx, p.Client, aggregator.AggregatorSettings{
@@ -82,27 +83,23 @@ func (p *Pipeline) Do(ctx context.Context) error {
 		slog.Info("Pools fetched")
 		if err != nil {
 			slog.Error("aggregator couldn't fetch pools", "error", err)
-			i = (i + 1) % len(p.StartTokens)
 			time.Sleep(1 * time.Minute)
 			continue
 		}
 
 		graph := analyzer.BuildGraph(pools)
 
-		startToken := p.StartTokens[i]
-		minStartCapital := p.MinStartCapital[i]
-		maxStartCapital := p.MaxStartCapital[i]
-		stepFee := p.StepFees[i]
-		cycles := graph.FindAllCycles(startToken)
-
-		err = p.DoForStartToken(ctx, cycles, startToken, minStartCapital, maxStartCapital, stepFee)
-		if err != nil {
-			slog.Error("failed to find and execute cycle", "error", err)
-			i = (i + 1) % len(p.StartTokens)
-			time.Sleep(1 * time.Minute)
-			continue
+		for i, startToken := range p.StartTokens {
+			cycles := graph.FindAllCycles(startToken)
+			found, err := p.DoForStartToken(ctx, cycles, startToken, p.MinStartCapital[i], p.MaxStartCapital[i], p.StepFees[i])
+			if err != nil {
+				slog.Error("failed to execute cycle", "token", startToken, "error", err)
+			}
+			if found {
+				break
+			}
 		}
-		i = (i + 1) % len(p.StartTokens)
+
 		time.Sleep(1 * time.Minute)
 	}
 }
