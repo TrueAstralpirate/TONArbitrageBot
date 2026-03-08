@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/tlb"
 	"github.com/xssnick/tonutils-go/ton/jetton"
@@ -346,19 +347,24 @@ type executedStep struct {
 }
 
 func (ce *CycleExecutor) sendWithSeqnoRetry(ctx context.Context, msg *wallet.Message) error {
-	for attempt := range 3 {
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 1 * time.Second
+	b.MaxInterval = 10 * time.Second
+	b.MaxElapsedTime = 60 * time.Second
+
+	attempt := 0
+	return backoff.Retry(func() error {
 		err := ce.Wallet.Send(ctx, msg)
 		if err == nil {
 			return nil
 		}
-		if strings.Contains(err.Error(), "Too old seqno") && attempt < 2 {
-			slog.Warn("seqno mismatch, retrying send", "attempt", attempt+1)
-			time.Sleep(2 * time.Second)
-			continue
+		if strings.Contains(err.Error(), "Too old seqno") {
+			attempt++
+			slog.Warn("seqno mismatch, retrying send", "attempt", attempt)
+			return err
 		}
-		return err
-	}
-	return nil
+		return backoff.Permanent(err)
+	}, backoff.WithContext(b, ctx))
 }
 
 func (ce *CycleExecutor) waitForBalanceChange(ctx context.Context, token models.TokenMetadata, balanceBefore float64, timeout time.Duration) error {
