@@ -13,6 +13,11 @@ import (
 	"github.com/xssnick/tonutils-go/ton/wallet"
 )
 
+const (
+	tonAddress  = "TON"
+	usdtAddress = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs"
+)
+
 func main() {
 	seedFile := flag.String("seed-file", "", "Path to wallet seed words file (required)")
 	tonConfig := flag.String("ton-config", "https://ton-blockchain.github.io/global.config.json", "TON network config URL")
@@ -71,7 +76,7 @@ func main() {
 		UseDeDust:           *useDedust,
 		UseStonFi:           *useStonfi,
 		UseCoffee:           *useCoffee,
-		StartTokens:         []string{"TON", "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs"},
+		StartTokens:         []string{tonAddress, usdtAddress},
 		MinStartCapital:     []float64{*minTonCapital, *minUsdCapital},
 		MaxStartCapital:     []float64{*maxTonCapital, *maxUsdCapital},
 		StepFees:            []float64{*stepTonFees, *stepUsdFees},
