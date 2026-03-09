@@ -30,7 +30,7 @@ func main() {
 	stepTonFees := flag.Float64("step-ton-fees", 0.06, "Fee per swap step for TON cycles (in TON)")
 	minUsdCapital := flag.Float64("min-usd-capital", 0.2, "Minimum start capital for USD cycles")
 	maxUsdCapital := flag.Float64("max-usd-capital", 200, "Maximum start capital for USD cycles")
-	stepUsdFees := flag.Float64("step-usd-fees", 0.18, "Fee per swap step for USD cycles")
+	stepUsdFees := flag.Float64("step-usd-fees", 0.1, "Fee per swap step for USD cycles")
 
 	flag.Parse()
 

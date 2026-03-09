@@ -34,7 +34,7 @@ go run ./cmd/arbitrage --seed-file words.txt --only-show-cycles
 | `--step-ton-fees` | float | `0.06` | Fee per swap step for TON cycles (in TON) |
 | `--min-usd-capital` | float | `0.2` | Minimum start capital for USD cycles |
 | `--max-usd-capital` | float | `200` | Maximum start capital for USD cycles |
-| `--step-usd-fees` | float | `0.18` | Fee per swap step for USD cycles |
+| `--step-usd-fees` | float | `0.1` | Fee per swap step for USD cycles |
 
 ## Example Trades
 
