@@ -2,6 +2,7 @@ package main
 
 import (
 	"arbitrage/internal/explorer/ton/chain"
+	dedustapi "arbitrage/internal/explorer/ton/dedust"
 	tonpipeline "arbitrage/internal/pipeline/ton"
 	"context"
 	"flag"
@@ -67,11 +68,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	dedustExplorer, err := dedustapi.NewDedustExplorer(client, *dedustPoolsFile)
+	if err != nil {
+		slog.Error("failed to create dedust explorer", "error", err)
+		os.Exit(1)
+	}
+
 	pipeline := tonpipeline.Pipeline{
-		Client:              client,
-		Wallet:              w,
-		DedustPoolsFilePath: *dedustPoolsFile,
-		TONConfig:           *tonConfig,
+		Client:         client,
+		Wallet:         w,
+		DedustExplorer: dedustExplorer,
+		TONConfig:      *tonConfig,
 		UseDeDust:      *useDedust,
 		UseStonFi:      *useStonfi,
 		StartTokens:         []string{tonAddress, usdtAddress},
