@@ -1,7 +1,6 @@
 package aggregator
 
 import (
-	"arbitrage/internal/explorer/ton/chain"
 	dedustapi "arbitrage/internal/explorer/ton/dedust"
 	stonfiapi "arbitrage/internal/explorer/ton/stonfi"
 	"arbitrage/internal/models"
@@ -11,22 +10,17 @@ import (
 )
 
 type AggregatorSettings struct {
-	UseDeDust           bool
-	DedustPoolsFilePath string
-
-	UseStonFi bool
+	DedustExplorer *dedustapi.DedustExplorer
+	UseDeDust      bool
+	UseStonFi      bool
 }
 
-func FetchPools(ctx context.Context, client *chain.TonClient, settings AggregatorSettings) ([]models.Pool, error) {
+func FetchPools(ctx context.Context, settings AggregatorSettings) ([]models.Pool, error) {
 	pools := make([]models.Pool, 0)
 
 	if settings.UseDeDust {
 		slog.Info("Fetching dedust pools")
-		explorer, err := dedustapi.NewDedustExplorer(client, settings.DedustPoolsFilePath)
-		if err != nil {
-			return nil, fmt.Errorf("create dedust explorer: %w", err)
-		}
-		deDustPools, err := explorer.FetchPools(ctx)
+		deDustPools, err := settings.DedustExplorer.FetchPools(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("fetch dedust pools: %w", err)
 		}

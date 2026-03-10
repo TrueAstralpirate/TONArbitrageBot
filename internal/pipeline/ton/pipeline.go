@@ -5,6 +5,7 @@ import (
 	tonexecutor "arbitrage/internal/execute/ton"
 	"arbitrage/internal/explorer/ton/aggregator"
 	"arbitrage/internal/explorer/ton/chain"
+	dedustapi "arbitrage/internal/explorer/ton/dedust"
 	"arbitrage/internal/models"
 	"context"
 	"fmt"
@@ -15,16 +16,12 @@ import (
 	"github.com/xssnick/tonutils-go/ton/wallet"
 )
 
-type PipelineSettings struct {
-	SortCyclesByProfit bool
-}
-
 type Pipeline struct {
 	Client *chain.TonClient
 	Wallet *wallet.Wallet
 
-	DedustPoolsFilePath string
-	TONConfig           string
+	DedustExplorer *dedustapi.DedustExplorer
+	TONConfig      string
 	UseDeDust      bool
 	UseStonFi      bool
 	OnlyShowCycles bool
@@ -73,10 +70,10 @@ func (p *Pipeline) DoForStartToken(ctx context.Context, cycles []models.Arbitrag
 func (p *Pipeline) Do(ctx context.Context) error {
 	for {
 		slog.Info("Fetching pools")
-		pools, err := aggregator.FetchPools(ctx, p.Client, aggregator.AggregatorSettings{
-			UseDeDust:           p.UseDeDust,
-			UseStonFi:           p.UseStonFi,
-			DedustPoolsFilePath: p.DedustPoolsFilePath,
+		pools, err := aggregator.FetchPools(ctx, aggregator.AggregatorSettings{
+			DedustExplorer: p.DedustExplorer,
+			UseDeDust:      p.UseDeDust,
+			UseStonFi:      p.UseStonFi,
 		})
 		slog.Info("Pools fetched")
 		if err != nil {
