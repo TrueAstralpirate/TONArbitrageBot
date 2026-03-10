@@ -6,6 +6,7 @@ import (
 	models "arbitrage/internal/models"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -40,7 +41,7 @@ func validatePool(p *Pool) bool {
 func ReadPoolAssetsFromFile(filePath string) (map[string]PoolAssets, error) {
 	fileContent, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %v", err)
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	// Declare the map
@@ -73,7 +74,12 @@ func WritePoolAssetsToFile(data map[string]PoolAssets, filePath string) error {
 func NewDedustExplorer(client *chain.TonClient, filePath string) (*DedustExplorer, error) {
 	poolToAssets, err := ReadPoolAssetsFromFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read pool-assets map from file: %w", err)
+		if errors.Is(err, os.ErrNotExist) {
+			slog.Info("Pool-assets cache file not found, starting with empty cache", "path", filePath)
+			poolToAssets = make(map[string]PoolAssets)
+		} else {
+			return nil, fmt.Errorf("failed to read pool-assets map from file: %w", err)
+		}
 	}
 	return &DedustExplorer{
 		Client:               client,
