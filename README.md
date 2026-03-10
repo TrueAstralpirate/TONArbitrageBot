@@ -2,6 +2,15 @@
 
 Finds and executes arbitrage cycles across DeDust and StonFi DEX on TON.
 
+## Quick Start
+
+```bash
+git clone https://github.com/TrueAstralpirate/TONArbitrageBot.git
+cd TONArbitrageBot
+echo "word1 word2 ... word24" > words.txt
+go run ./cmd/arbitrage --seed-file words.txt
+```
+
 ## Requirements
 
 - Go 1.24+
