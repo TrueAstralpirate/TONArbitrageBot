@@ -382,7 +382,7 @@ func (ce *CycleExecutor) waitForBalanceChange(ctx context.Context, token models.
 		if err != nil {
 			continue
 		}
-		if balanceAfter != balanceBefore {
+		if balanceAfter > balanceBefore {
 			return nil
 		}
 	}
