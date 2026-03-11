@@ -32,7 +32,6 @@ func TestCalculate_SinglePool(t *testing.T) {
 		t.Fatalf("expected output address USDT, got %s", addr)
 	}
 
-	// Verify against manual AMM calc with slippage=1.0 (Slippage var)
 	fee := 1.0 - 0.3/100.0
 	slip := 1.0 - Slippage/100.0
 	expected := slip * (2000.0 * fee * 10.0) / (1000.0 + fee*10.0)
@@ -65,59 +64,139 @@ func TestCalculate_ErrorOnBadToken(t *testing.T) {
 	}
 }
 
-func TestCalculateDerivative_Positive(t *testing.T) {
-	// Two pools forming a cycle: TON->USDT->TON with favorable rates
+func TestFindOptimalCapital_2Pool(t *testing.T) {
 	pool1 := makePool("TON", "USDT", "pool1", 1000, 3000, 0.3)
 	pool2 := makePool("USDT", "TON", "pool2", 3000, 1100, 0.3)
 
-	deriv, err := CalculateDerivative([]models.Pool{pool1, pool2}, 0.01, "TON")
+	x, profit, err := FindOptimalCapital([]models.Pool{pool1, pool2}, "TON")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// At very low capital, derivative should be > 1 for a profitable cycle
-	if deriv <= 1.0 {
-		t.Fatalf("expected derivative > 1 at low capital, got %f", deriv)
+	if x <= 0 {
+		t.Fatalf("expected positive optimal capital, got %f", x)
+	}
+	if profit <= 0 {
+		t.Fatalf("expected positive profit, got %f", profit)
+	}
+
+	revenue, _, err := Calculate([]models.Pool{pool1, pool2}, x, "TON", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if math.Abs((revenue-x)-profit) > 0.01 {
+		t.Fatalf("profit mismatch: FindOptimalCapital=%f, Calculate=%f", profit, revenue-x)
 	}
 }
 
-func TestCalculateDerivative_LessThanOne(t *testing.T) {
+func TestFindOptimalCapital_3Pool(t *testing.T) {
+	pool1 := makePool("TON", "USDT", "pool1", 1000, 3000, 0.3)
+	pool2 := makePool("USDT", "BTC", "pool2", 2000, 500, 0.3)
+	pool3 := makePool("BTC", "TON", "pool3", 400, 1200, 0.3)
+
+	x, profit, err := FindOptimalCapital([]models.Pool{pool1, pool2, pool3}, "TON")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if x <= 0 || profit <= 0 {
+		t.Fatalf("expected profitable 3-pool cycle, got x=%f profit=%f", x, profit)
+	}
+
+	revenue, _, err := Calculate([]models.Pool{pool1, pool2, pool3}, x, "TON", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if math.Abs((revenue-x)-profit) > 0.01 {
+		t.Fatalf("profit mismatch: FindOptimalCapital=%f, Calculate=%f", profit, revenue-x)
+	}
+}
+
+func TestFindOptimalCapital_4Pool(t *testing.T) {
+	pool1 := makePool("TON", "USDT", "pool1", 1000, 3000, 0.3)
+	pool2 := makePool("USDT", "BTC", "pool2", 2000, 500, 0.3)
+	pool3 := makePool("BTC", "ETH", "pool3", 400, 800, 0.3)
+	pool4 := makePool("ETH", "TON", "pool4", 600, 1500, 0.3)
+
+	x, profit, err := FindOptimalCapital([]models.Pool{pool1, pool2, pool3, pool4}, "TON")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if x <= 0 || profit <= 0 {
+		t.Fatalf("expected profitable 4-pool cycle, got x=%f profit=%f", x, profit)
+	}
+
+	revenue, _, err := Calculate([]models.Pool{pool1, pool2, pool3, pool4}, x, "TON", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if math.Abs((revenue-x)-profit) > 0.01 {
+		t.Fatalf("profit mismatch: FindOptimalCapital=%f, Calculate=%f", profit, revenue-x)
+	}
+}
+
+func TestFindOptimalCapital_IsOptimal(t *testing.T) {
 	pool1 := makePool("TON", "USDT", "pool1", 1000, 3000, 0.3)
 	pool2 := makePool("USDT", "TON", "pool2", 3000, 1100, 0.3)
 
-	deriv, err := CalculateDerivative([]models.Pool{pool1, pool2}, 500.0, "TON")
+	x, profit, err := FindOptimalCapital([]models.Pool{pool1, pool2}, "TON")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// At high capital, derivative should be < 1 (past optimal)
-	if deriv >= 1.0 {
-		t.Fatalf("expected derivative < 1 at high capital, got %f", deriv)
+
+	delta := 0.1
+	revLess, _, _ := Calculate([]models.Pool{pool1, pool2}, x-delta, "TON", false)
+	revMore, _, _ := Calculate([]models.Pool{pool1, pool2}, x+delta, "TON", false)
+	profitLess := revLess - (x - delta)
+	profitMore := revMore - (x + delta)
+
+	if profitLess > profit+0.001 {
+		t.Fatalf("x-delta has higher profit: %f > %f", profitLess, profit)
+	}
+	if profitMore > profit+0.001 {
+		t.Fatalf("x+delta has higher profit: %f > %f", profitMore, profit)
 	}
 }
 
-func TestFindDerivativePoint_ReturnsOptimal(t *testing.T) {
-	pool1 := makePool("TON", "USDT", "pool1", 1000, 3000, 0.3)
-	pool2 := makePool("USDT", "TON", "pool2", 3000, 1100, 0.3)
+func TestFindOptimalCapital_NotProfitable(t *testing.T) {
+	pool1 := makePool("TON", "USDT", "pool1", 1000, 1000, 0.3)
+	pool2 := makePool("USDT", "TON", "pool2", 1000, 1000, 0.3)
 
-	optimal, err := FindDerivativePoint([]models.Pool{pool1, pool2}, 1.0, "TON")
+	x, profit, err := FindOptimalCapital([]models.Pool{pool1, pool2}, "TON")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if optimal <= 0 {
-		t.Fatalf("expected positive optimal capital, got %f", optimal)
-	}
-	if optimal > MaxValue {
-		t.Fatalf("optimal capital %f exceeds MaxValue", optimal)
+	if x != 0 || profit != 0 {
+		t.Fatalf("expected zero for unprofitable cycle, got x=%f profit=%f", x, profit)
 	}
 }
 
-func TestFindDerivativePoint_InvalidK(t *testing.T) {
+func TestFindOptimalCapital_InvalidToken(t *testing.T) {
 	pool := makePool("TON", "USDT", "pool1", 1000, 2000, 0.3)
-	_, err := FindDerivativePoint([]models.Pool{pool}, 0, "TON")
+	pool2 := makePool("USDT", "TON", "pool2", 2000, 1000, 0.3)
+	_, _, err := FindOptimalCapital([]models.Pool{pool, pool2}, "INVALID")
 	if err == nil {
-		t.Fatal("expected error for k=0, got nil")
+		t.Fatal("expected error for invalid token")
 	}
-	_, err = FindDerivativePoint([]models.Pool{pool}, -1, "TON")
-	if err == nil {
-		t.Fatal("expected error for k<0, got nil")
+}
+
+func TestFindOptimalCapital_LargeReserves(t *testing.T) {
+	pool1 := makePool("TON", "USDT", "pool1", 1e9, 3e9, 0.3)
+	pool2 := makePool("USDT", "BTC", "pool2", 2e9, 5e8, 0.3)
+	pool3 := makePool("BTC", "ETH", "pool3", 4e8, 8e8, 0.3)
+	pool4 := makePool("ETH", "TON", "pool4", 6e8, 1.5e9, 0.3)
+
+	x, profit, err := FindOptimalCapital([]models.Pool{pool1, pool2, pool3, pool4}, "TON")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if x <= 0 || profit <= 0 {
+		t.Fatalf("expected profitable cycle with large reserves, got x=%f profit=%f", x, profit)
+	}
+
+	revenue, _, err := Calculate([]models.Pool{pool1, pool2, pool3, pool4}, x, "TON", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if math.Abs((revenue-x)-profit) > 0.01 {
+		t.Fatalf("profit mismatch with large reserves: FindOptimalCapital=%f, Calculate=%f", profit, revenue-x)
 	}
 }

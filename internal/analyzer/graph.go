@@ -57,20 +57,16 @@ func BuildGraph(pools []models.Pool) Graph {
 	return result
 }
 
-func buildArbitrageCycleFromPools(tokensOrder []models.TokenMetadata, pools []models.Pool, coef float64, start string) (*models.ArbitrageCycle, error) {
-	optimalStart, err := FindDerivativePoint(pools, coef, start)
+func buildArbitrageCycleFromPools(tokensOrder []models.TokenMetadata, pools []models.Pool, start string) (*models.ArbitrageCycle, error) {
+	optimalStart, profit, err := FindOptimalCapital(pools, start)
 	if err != nil {
-		return nil, fmt.Errorf("find derivative point: %w", err)
-	}
-	revenue, _, err := Calculate(pools, optimalStart, start, false)
-	if err != nil {
-		return nil, fmt.Errorf("calculate revenue: %w", err)
+		return nil, fmt.Errorf("find optimal capital: %w", err)
 	}
 	return &models.ArbitrageCycle{
 		TokensOrder:  tokensOrder,
 		PoolsOrder:   pools,
 		StartCapital: optimalStart,
-		Profit:       revenue - optimalStart,
+		Profit:       profit,
 	}, nil
 }
 
@@ -86,7 +82,7 @@ func (g *Graph) find2Cycles(start string, edgesToStart, edgesFromStart map[strin
 					continue
 				}
 				pools := []models.Pool{*e0.PoolRef, *e1.PoolRef}
-				cycle, err := buildArbitrageCycleFromPools([]models.TokenMetadata{e0.From, e0.To}, pools, 1.0, start)
+				cycle, err := buildArbitrageCycleFromPools([]models.TokenMetadata{e0.From, e0.To}, pools, start)
 				if err != nil {
 					slog.Error("error building 2-cycle", "error", err)
 					continue
@@ -108,7 +104,7 @@ func (g *Graph) find3Cycles(start string, edgesToStart, edgesFromStart map[strin
 		for _, e0 := range edgesFromStart[e.From.Address] {
 			for _, e1 := range edgesToStart[e.To.Address] {
 				pools := []models.Pool{*e0.PoolRef, *e.PoolRef, *e1.PoolRef}
-				cycle, err := buildArbitrageCycleFromPools([]models.TokenMetadata{e0.From, e0.To, e1.From}, pools, 1.0, start)
+				cycle, err := buildArbitrageCycleFromPools([]models.TokenMetadata{e0.From, e0.To, e1.From}, pools, start)
 				if err != nil {
 					slog.Error("error building 3-cycle", "error", err)
 					continue
@@ -134,7 +130,7 @@ func (g *Graph) find4Cycles(start string, edgesToStart, edgesFromStart, edgesFro
 			for _, e0 := range edgesFromStart[e1.From.Address] {
 				for _, e3 := range edgesToStart[e2.To.Address] {
 					pools := []models.Pool{*e0.PoolRef, *e1.PoolRef, *e2.PoolRef, *e3.PoolRef}
-					cycle, err := buildArbitrageCycleFromPools([]models.TokenMetadata{e0.From, e0.To, e1.To, e2.To}, pools, 1.0, start)
+					cycle, err := buildArbitrageCycleFromPools([]models.TokenMetadata{e0.From, e0.To, e1.To, e2.To}, pools, start)
 					if err != nil {
 						slog.Error("error building 4-cycle", "error", err)
 						continue
