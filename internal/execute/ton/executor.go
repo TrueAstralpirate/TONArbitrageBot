@@ -354,7 +354,7 @@ func (ce *CycleExecutor) sendWithSeqnoRetry(ctx context.Context, msg *wallet.Mes
 
 	attempt := 0
 	return backoff.Retry(func() error {
-		err := ce.Wallet.Send(ctx, msg)
+		_, _, err := ce.Wallet.SendManyWaitTransaction(ctx, []*wallet.Message{msg})
 		if err == nil {
 			return nil
 		}
@@ -364,7 +364,11 @@ func (ce *CycleExecutor) sendWithSeqnoRetry(ctx context.Context, msg *wallet.Mes
 	}, backoff.WithContext(b, ctx))
 }
 
-func (ce *CycleExecutor) waitForBalanceChange(ctx context.Context, token models.TokenMetadata, balanceBefore float64, timeout time.Duration) error {
+var errSwapRefunded = errors.New("swap was refunded: input token balance restored")
+
+// waitForSwapConfirmation polls until the output token balance increases AND
+// the input token balance decreases (confirming tokens were consumed, not refunded).
+func (ce *CycleExecutor) waitForSwapConfirmation(ctx context.Context, inputToken, outputToken models.TokenMetadata, inputBalanceBefore, outputBalanceBefore float64, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		select {
@@ -373,18 +377,37 @@ func (ce *CycleExecutor) waitForBalanceChange(ctx context.Context, token models.
 		default:
 		}
 
-		balanceAfter, err := ce.GetTokenBalance(ctx, token)
-		slog.Debug("polling balance", "balance", balanceAfter, "token", token.Symbol)
 		time.Sleep(5 * time.Second)
 		if time.Now().After(deadline) {
-			return fmt.Errorf("%w for token %s", errBalanceDidNotChange, token.Symbol)
+			return fmt.Errorf("%w for token %s", errBalanceDidNotChange, outputToken.Symbol)
 		}
+
+		outputBalance, err := ce.GetTokenBalance(ctx, outputToken)
 		if err != nil {
+			slog.Debug("polling output balance failed", "token", outputToken.Symbol, "error", err)
 			continue
 		}
-		if balanceAfter > balanceBefore {
-			return nil
+		slog.Debug("polling output balance", "balance", outputBalance, "token", outputToken.Symbol)
+
+		if outputBalance <= outputBalanceBefore {
+			continue
 		}
+
+		// Output increased — now verify input was consumed (not refunded)
+		inputBalance, err := ce.GetTokenBalance(ctx, inputToken)
+		if err != nil {
+			slog.Debug("polling input balance failed", "token", inputToken.Symbol, "error", err)
+			continue
+		}
+		slog.Debug("polling input balance", "balance", inputBalance, "token", inputToken.Symbol)
+
+		if inputBalance >= inputBalanceBefore {
+			slog.Warn("output token increased but input token was refunded, swap likely failed",
+				"inputToken", inputToken.Symbol, "outputToken", outputToken.Symbol)
+			return errSwapRefunded
+		}
+
+		return nil
 	}
 }
 
@@ -407,9 +430,13 @@ func (ce *CycleExecutor) rollbackCycle(ctx context.Context, steps []executedStep
 			return fmt.Errorf("rollback unexpected token: got %s want %s", nextToken.Symbol, tokenToGet.Symbol)
 		}
 
-		balanceBefore, err := ce.GetTokenBalance(ctx, tokenToGet)
+		inputBalanceBefore, err := ce.GetTokenBalance(ctx, tokenToSwap)
 		if err != nil {
-			return fmt.Errorf("rollback get balance before transaction: %w", err)
+			return fmt.Errorf("rollback get input balance: %w", err)
+		}
+		outputBalanceBefore, err := ce.GetTokenBalance(ctx, tokenToGet)
+		if err != nil {
+			return fmt.Errorf("rollback get output balance: %w", err)
 		}
 
 		slog.Info("rollback swapping", "amount", amountToSwap, "from", tokenToSwap.Symbol, "to_amount", res, "to", tokenToGet.Symbol)
@@ -423,9 +450,9 @@ func (ce *CycleExecutor) rollbackCycle(ctx context.Context, steps []executedStep
 		}
 		slog.Info("rollback transaction confirmed")
 
-		err = ce.waitForBalanceChange(ctx, tokenToGet, balanceBefore, 2*time.Minute)
+		err = ce.waitForSwapConfirmation(ctx, tokenToSwap, tokenToGet, inputBalanceBefore, outputBalanceBefore, transactionConfirmationTimeout)
 		if err != nil {
-			return fmt.Errorf("rollback wait for balance change: %w", err)
+			return fmt.Errorf("rollback wait for swap confirmation: %w", err)
 		}
 
 		amountToSwap = res
@@ -438,6 +465,8 @@ func (ce *CycleExecutor) ExecuteCycle(ctx context.Context, cycle models.Arbitrag
 	amountToSwap := cycle.StartCapital
 	executedSteps := make([]executedStep, 0, len(cycle.PoolsOrder))
 
+	lastStep := len(cycle.PoolsOrder) - 1
+
 	for i := range cycle.PoolsOrder {
 		token := cycle.TokensOrder[i]
 		p := cycle.PoolsOrder[i]
@@ -447,13 +476,28 @@ func (ce *CycleExecutor) ExecuteCycle(ctx context.Context, cycle models.Arbitrag
 			return fmt.Errorf("estimate swap: %w", err)
 		}
 
-		balanceBeforeTransaction, err := ce.GetTokenBalance(ctx, *nextToken)
-		if err != nil {
-			return fmt.Errorf("get balance before transaction: %w", err)
+		// On the last step, set minOut to 0 to guarantee the swap completes.
+		// We skip balance confirmation and rollback on the last step, so the
+		// swap must succeed to avoid being stuck with an intermediate token.
+		minOut := res
+		if i == lastStep {
+			minOut = 0
+		}
+
+		var inputBalanceBefore, outputBalanceBefore float64
+		if i != lastStep {
+			inputBalanceBefore, err = ce.GetTokenBalance(ctx, token)
+			if err != nil {
+				return fmt.Errorf("get input balance before transaction: %w", err)
+			}
+			outputBalanceBefore, err = ce.GetTokenBalance(ctx, *nextToken)
+			if err != nil {
+				return fmt.Errorf("get output balance before transaction: %w", err)
+			}
 		}
 
 		slog.Info("Processing pool", "step", i)
-		msg, err := ce.BuildMessageFromCycleStep(ctx, token, *nextToken, p, amountToSwap, res)
+		msg, err := ce.BuildMessageFromCycleStep(ctx, token, *nextToken, p, amountToSwap, minOut)
 		if err != nil {
 			return fmt.Errorf("build message from cycle step: %w", err)
 		}
@@ -464,15 +508,20 @@ func (ce *CycleExecutor) ExecuteCycle(ctx context.Context, cycle models.Arbitrag
 			return fmt.Errorf("send transaction: %w", err)
 		}
 		slog.Info("transaction confirmed")
-		err = ce.waitForBalanceChange(ctx, *nextToken, balanceBeforeTransaction, 2*time.Minute)
+
+		if i == lastStep {
+			break
+		}
+
+		err = ce.waitForSwapConfirmation(ctx, token, *nextToken, inputBalanceBefore, outputBalanceBefore, transactionConfirmationTimeout)
 		if err != nil {
-			if errors.Is(err, errBalanceDidNotChange) {
+			if errors.Is(err, errBalanceDidNotChange) || errors.Is(err, errSwapRefunded) {
 				rollbackErr := ce.rollbackCycle(ctx, executedSteps)
 				if rollbackErr != nil {
-					return fmt.Errorf("balance did not change; rollback failed: %w", rollbackErr)
+					return fmt.Errorf("swap confirmation failed; rollback failed: %w", rollbackErr)
 				}
 			}
-			return fmt.Errorf("wait for balance change: %w", err)
+			return fmt.Errorf("wait for swap confirmation: %w", err)
 		}
 
 		executedSteps = append(executedSteps, executedStep{

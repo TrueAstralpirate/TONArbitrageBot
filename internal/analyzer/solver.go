@@ -4,15 +4,14 @@ import (
 	"arbitrage/internal/models"
 	"fmt"
 	"log/slog"
+	"math/big"
 )
 
-const (
-	BinSearchEps  = 0.0001
-	DerivativeEps = 0.0001
-	MaxValue      = 1000000000.0
-)
+const bigFloatPrec = 256
 
-func Calculate(pools []models.Pool, x float64, startAddress string, flag bool) (float64, string, error) {
+// Calculate simulates swapping x of startAddress through the given pools sequentially.
+// When log is true, it prints each swap step.
+func Calculate(pools []models.Pool, x float64, startAddress string, log bool) (float64, string, error) {
 	cur := x
 	curAddress := startAddress
 	var curName string
@@ -26,7 +25,7 @@ func Calculate(pools []models.Pool, x float64, startAddress string, flag bool) (
 		if err != nil {
 			return 0, "", fmt.Errorf("estimate swap on pool %s: %w", p.Address, err)
 		}
-		if flag {
+		if log {
 			poolLink := p.Address
 			switch p.DEX {
 			case models.DEXNameStonFi:
@@ -43,37 +42,79 @@ func Calculate(pools []models.Pool, x float64, startAddress string, flag bool) (
 	return cur, curAddress, nil
 }
 
-func CalculateDerivative(pools []models.Pool, x float64, startAddress string) (float64, error) {
-	res0, _, err := Calculate(pools, x+DerivativeEps, startAddress, false)
-	if err != nil {
-		return 0, err
-	}
-	res1, _, err := Calculate(pools, x-DerivativeEps, startAddress, false)
-	if err != nil {
-		return 0, err
-	}
-	return (res0 - res1) / (2.0 * DerivativeEps), nil
-}
+// FindOptimalCapital computes the optimal input amount and expected profit for an
+// arbitrage cycle using a closed-form solution derived from the constant-product AMM formula.
+//
+// For a chain of n pools, the output is y(x) = N·x / (D + E·x), where N, D, E are
+// computed via recurrence. The optimal input is x* = (√(N·D) - D) / E.
+func FindOptimalCapital(pools []models.Pool, startAddress string) (optimalX float64, profit float64, err error) {
+	N := new(big.Float).SetPrec(bigFloatPrec).SetFloat64(1)
+	D := new(big.Float).SetPrec(bigFloatPrec).SetFloat64(1)
+	E := new(big.Float).SetPrec(bigFloatPrec).SetFloat64(0)
 
-func FindDerivativePoint(pools []models.Pool, k float64, startAddress string) (float64, error) {
-	if k <= 0 {
-		return 0, fmt.Errorf("k is less than zero")
-	}
-	var l, r float64
-	l = 0
-	r = MaxValue
+	s := new(big.Float).SetPrec(bigFloatPrec).SetFloat64(1.0 - Slippage/100.0)
+	curAddress := startAddress
 
-	for r-l > BinSearchEps {
-		m := (l + r) / 2.0
-		res, err := CalculateDerivative(pools, m, startAddress)
-		if err != nil {
-			return 0, fmt.Errorf("calculate derivative at %f: %w", m, err)
-		}
-		if res >= k {
-			l = m
+	for _, p := range pools {
+		f := new(big.Float).SetPrec(bigFloatPrec).SetFloat64(1.0 - p.TradeFee/100.0)
+
+		var X, Y float64
+		var nextAddress string
+		if curAddress == p.TokenA.Metadata.Address {
+			X = p.TokenA.Reserve
+			Y = p.TokenB.Reserve
+			nextAddress = p.TokenB.Metadata.Address
+		} else if curAddress == p.TokenB.Metadata.Address {
+			X = p.TokenB.Reserve
+			Y = p.TokenA.Reserve
+			nextAddress = p.TokenA.Metadata.Address
 		} else {
-			r = m
+			return 0, 0, fmt.Errorf("pool %s doesn't contain token %s", p.Address, curAddress)
 		}
+
+		bigX := new(big.Float).SetPrec(bigFloatPrec).SetFloat64(X)
+		bigY := new(big.Float).SetPrec(bigFloatPrec).SetFloat64(Y)
+
+		// sfY = s * f * Y (numerator multiplier per pool)
+		sfY := new(big.Float).SetPrec(bigFloatPrec).Mul(s, f)
+		sfY.Mul(sfY, bigY)
+
+		// fN = f * N (used in E recurrence: denominator uses f, not s*f)
+		fN := new(big.Float).SetPrec(bigFloatPrec).Mul(f, N)
+
+		// Recurrence: N' = sfY * N, D' = X * D, E' = X * E + f * N
+		newN := new(big.Float).SetPrec(bigFloatPrec).Mul(sfY, N)
+		newD := new(big.Float).SetPrec(bigFloatPrec).Mul(bigX, D)
+		newE := new(big.Float).SetPrec(bigFloatPrec).Mul(bigX, E)
+		newE.Add(newE, fN)
+
+		N, D, E = newN, newD, newE
+		curAddress = nextAddress
 	}
-	return l, nil
+
+	if curAddress != startAddress {
+		return 0, 0, fmt.Errorf("cycle doesn't return to start token: ended at %s", curAddress)
+	}
+
+	// Not profitable if N <= D
+	if N.Cmp(D) <= 0 {
+		return 0, 0, nil
+	}
+
+	// x* = (√(N·D) - D) / E
+	nd := new(big.Float).SetPrec(bigFloatPrec).Mul(N, D)
+	sqrtND := new(big.Float).SetPrec(bigFloatPrec).Sqrt(nd)
+	num := new(big.Float).SetPrec(bigFloatPrec).Sub(sqrtND, D)
+	xStar := new(big.Float).SetPrec(bigFloatPrec).Quo(num, E)
+
+	// profit = N·x/(D+E·x) - x
+	ex := new(big.Float).SetPrec(bigFloatPrec).Mul(E, xStar)
+	denom := new(big.Float).SetPrec(bigFloatPrec).Add(D, ex)
+	nx := new(big.Float).SetPrec(bigFloatPrec).Mul(N, xStar)
+	y := new(big.Float).SetPrec(bigFloatPrec).Quo(nx, denom)
+	p := new(big.Float).SetPrec(bigFloatPrec).Sub(y, xStar)
+
+	optimalX, _ = xStar.Float64()
+	profit, _ = p.Float64()
+	return optimalX, profit, nil
 }
